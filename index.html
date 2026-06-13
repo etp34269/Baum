@@ -602,15 +602,14 @@ const p = JSON.parse(text);
   if (!p?.species?.length) throw new Error('Keine Baumart erkannt.');
 const aiDiameter = +p.crown_diameter_m || 0;
 
+const aiDiameter = (+p.crown_diameter_m || 0) * 0.70;
+
 return {
   species: p.species.slice(0,3).map(s=>({
     name:s.name,
     confidence:Math.round(+s.confidence||0)
   })),
-  crownDiameterM:
-    aiDiameter > 0
-      ? aiDiameter * 0.70
-      : null
+  crownDiameterM: aiDiameter
 };
 
 identifyBtn.addEventListener('click', async () => {
@@ -651,7 +650,22 @@ estimateBtn.addEventListener('click', async () => {
   estimateBtn.disabled=true; estimateBtn.textContent='🔄 Schätze Kronenvolumen …'; crownHelp.textContent='';
   try {
     const r = await geminiIdentify(canvas);
-    if (r.crownVolumeM3) { crownVolume.value=r.crownVolumeM3.toFixed(0); crownHelp.textContent=`Geschätztes Kronenvolumen: ${r.crownVolumeM3.toFixed(0)} m³`; calcFacade(); }
+if (r.crownDiameterM) {
+
+  const diameter = r.crownDiameterM;
+  const radius = diameter / 2;
+
+  const crownArea =
+    Math.PI * radius * radius;
+
+  crownVolume.value =
+    crownArea.toFixed(1);
+
+  crownHelp.textContent =
+    `Kronendurchmesser: ${diameter.toFixed(1)} m · Kronenfläche: ${crownArea.toFixed(1)} m²`;
+
+  calcFacade();
+}
     else crownHelp.textContent='KI konnte kein Kronenvolumen ermitteln.';
   } catch(e) { crownHelp.textContent=`Fehler: ${e.message}`; }
   finally { estimateBtn.disabled=false; estimateBtn.textContent='🌳 Kronenvolumen von KI schätzen lassen'; }
