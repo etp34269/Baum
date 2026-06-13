@@ -156,6 +156,62 @@
   }
   .apikey-box a { color: var(--leaf); }
 
+  /* === Lebensraum-Analyse === */
+  .match-box {
+    background: var(--moss);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+    margin: 1rem 0;
+    font-size: 0.9rem;
+  }
+  .match-box .match-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.15rem 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .match-box .match-row:last-child { border-bottom: none; }
+  .match-box .match-row span:first-child { color: var(--text-soft); }
+  .match-box .match-row span:last-child { font-weight: 600; text-align: right; }
+
+  .animal-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 0.9rem;
+    margin-top: 1rem;
+  }
+  .animal-card {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 0.9rem 1rem;
+    background: #fff;
+  }
+  .animal-card .a-head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.4rem;
+  }
+  .animal-card .a-icon { font-size: 1.4rem; }
+  .animal-card .a-name { font-weight: 700; }
+  .animal-card .a-type {
+    font-size: 0.75rem;
+    color: var(--text-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .animal-card .a-box {
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px dashed var(--line);
+    font-size: 0.85rem;
+    color: var(--text-soft);
+  }
+  .animal-card .a-box b { color: var(--text); }
+
+
   /* === Upload === */
   .dropzone {
     border: 2px dashed var(--line);
@@ -572,6 +628,28 @@
       <div class="row2"><span>Mittlere Bedeutung</span><span>8 WP</span></div>
       <div class="row2"><span>Geringe Bedeutung</span><span>3 WP</span></div>
     </div>
+
+    <hr style="border:none;border-top:1px solid var(--line);margin:1.5rem 0;">
+
+    <h3 style="margin:0 0 0.5rem;">🦋 Lebensraum-Analyse</h3>
+    <p class="hint" style="margin-bottom:0.5rem;">
+      Basierend auf der erkannten Baumart, der geschätzten Baumgröße und dem gewählten Standort
+      wird in unserer Wissensdatenbank nachgeschlagen, welche Tiergruppen typischerweise vorkommen.
+      Die KI ermittelt anschließend die 5 häufigsten Tiere (Vögel, Insekten, Fledermäuse) sowie
+      passende Nist- bzw. Fledermauskästen mit Maßen.
+    </p>
+
+    <div class="match-box" id="matchBox">
+      <div class="match-row"><span>Baumart (Datenbank)</span><span id="matchBaumart">–</span></div>
+      <div class="match-row"><span>Baumgröße</span><span id="matchGroesse">–</span></div>
+      <div class="match-row"><span>Standort</span><span id="matchStandort">–</span></div>
+      <div class="match-row"><span>Typische Arten (Datenbank)</span><span id="matchArten">–</span></div>
+    </div>
+
+    <button class="btn secondary" id="animalsBtn" disabled>🐦 Tierarten &amp; Nistkästen ermitteln (KI)</button>
+    <p class="canvas-help" id="animalsHelp"></p>
+
+    <div class="animal-grid" id="animalGrid"></div>
   </section>
 
   <!-- Schritt 5: Bebauungsgrad & Ersatzfläche -->
@@ -627,6 +705,16 @@
   const wpValue = document.getElementById('wpValue');
   const wpLabel = document.getElementById('wpLabel');
   const wpDesc = document.getElementById('wpDesc');
+  const locationType = document.getElementById('locationType');
+  const matchBaumart = document.getElementById('matchBaumart');
+  const matchGroesse = document.getElementById('matchGroesse');
+  const matchStandort = document.getElementById('matchStandort');
+  const matchArten = document.getElementById('matchArten');
+  const animalsBtn = document.getElementById('animalsBtn');
+  const animalsHelp = document.getElementById('animalsHelp');
+  const animalGrid = document.getElementById('animalGrid');
+
+  let lastSpeciesName = null;
 
   let img = new Image();
 
@@ -745,6 +833,7 @@
     try {
       const result = await identifyTreeSpecies(canvas);
       const top = result.species[0];
+      lastSpeciesName = top.name;
       speciesName.textContent = top.name;
       const alternatives = result.species.slice(1)
         .map(r => `${r.name} (${r.confidence}%)`)
@@ -759,6 +848,7 @@
         crownHelp.textContent = `Von der KI mitgeschätzt: ${result.crownDiameterM.toFixed(1)} m`;
         calcFacade();
       }
+      updateHabitatMatch();
     } catch (err) {
       speciesName.textContent = 'Erkennung fehlgeschlagen';
       speciesConf.textContent = err.message;
@@ -780,6 +870,7 @@
         crownDiameterInput.value = result.crownDiameterM.toFixed(1);
         crownHelp.textContent = `Geschätzter Kronendurchmesser: ${result.crownDiameterM.toFixed(1)} m (KI-Schätzung)`;
         calcFacade();
+        updateHabitatMatch();
       } else {
         crownHelp.textContent = 'Die KI konnte keinen Kronendurchmesser ermitteln.';
       }
@@ -875,6 +966,226 @@
       })),
       crownDiameterM: Number(parsed.crown_diameter_m) || null
     };
+  }
+
+
+  // === Lebensraum-Wissensdatenbank (aus Tabelle_Website_vorentwurf.xlsx, Sheet KI_Wissensdatenbank, Spalten A-D) ===
+  const TREE_DB = [["Ahorn in Sorten","Klein","Urban","Meisen; Wildbienen; Tagfalter"],["Ahorn in Sorten","Klein","Wald","Meisen; Wildbienen; Tagfalter"],["Ahorn in Sorten","Klein","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Ahorn in Sorten","Klein","Offenland","Meisen; Wildbienen; Tagfalter"],["Ahorn in Sorten","Mittel","Urban","Meisen; Wildbienen; Tagfalter"],["Ahorn in Sorten","Mittel","Wald","Meisen; Wildbienen; Tagfalter"],["Ahorn in Sorten","Mittel","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Ahorn in Sorten","Mittel","Offenland","Meisen; Wildbienen; Tagfalter"],["Ahorn in Sorten","Gross","Urban","Meisen; Wildbienen; Tagfalter"],["Ahorn in Sorten","Gross","Wald","Meisen; Wildbienen; Tagfalter"],["Ahorn in Sorten","Gross","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Ahorn in Sorten","Gross","Offenland","Meisen; Wildbienen; Tagfalter"],["Roßkastanie","Klein","Urban","Meisen; Wildbienen; Tagfalter"],["Roßkastanie","Klein","Wald","Meisen; Wildbienen; Tagfalter"],["Roßkastanie","Klein","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Roßkastanie","Klein","Offenland","Meisen; Wildbienen; Tagfalter"],["Roßkastanie","Mittel","Urban","Meisen; Wildbienen; Tagfalter"],["Roßkastanie","Mittel","Wald","Meisen; Wildbienen; Tagfalter"],["Roßkastanie","Mittel","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Roßkastanie","Mittel","Offenland","Meisen; Wildbienen; Tagfalter"],["Roßkastanie","Gross","Urban","Meisen; Wildbienen; Tagfalter"],["Roßkastanie","Gross","Wald","Meisen; Wildbienen; Tagfalter"],["Roßkastanie","Gross","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Roßkastanie","Gross","Offenland","Meisen; Wildbienen; Tagfalter"],["Schwarz-Erle","Klein","Urban","Erlenzeisig; Feuchtgebietsinsekten; Wasserfledermaus"],["Schwarz-Erle","Klein","Wald","Erlenzeisig; Feuchtgebietsinsekten; Wasserfledermaus"],["Schwarz-Erle","Klein","Gewaesser","Erlenzeisig; Feuchtgebietsinsekten; Wasserfledermaus"],["Schwarz-Erle","Klein","Offenland","Erlenzeisig; Feuchtgebietsinsekten; Wasserfledermaus"],["Schwarz-Erle","Mittel","Urban","Erlenzeisig; Feuchtgebietsinsekten; Wasserfledermaus"],["Schwarz-Erle","Mittel","Wald","Erlenzeisig; Feuchtgebietsinsekten; Wasserfledermaus"],["Schwarz-Erle","Mittel","Gewaesser","Erlenzeisig; Feuchtgebietsinsekten; Wasserfledermaus"],["Schwarz-Erle","Mittel","Offenland","Erlenzeisig; Feuchtgebietsinsekten; Wasserfledermaus"],["Schwarz-Erle","Gross","Urban","Erlenzeisig; Feuchtgebietsinsekten; Wasserfledermaus"],["Schwarz-Erle","Gross","Wald","Erlenzeisig; Feuchtgebietsinsekten; Wasserfledermaus"],["Schwarz-Erle","Gross","Gewaesser","Erlenzeisig; Feuchtgebietsinsekten; Wasserfledermaus"],["Schwarz-Erle","Gross","Offenland","Erlenzeisig; Feuchtgebietsinsekten; Wasserfledermaus"],["Sand-/Weiß-Birke","Klein","Urban","Zeisig; Tagfalter; Wildbienen"],["Sand-/Weiß-Birke","Klein","Wald","Zeisig; Tagfalter; Wildbienen"],["Sand-/Weiß-Birke","Klein","Gewaesser","Zeisig; Tagfalter; Wildbienen"],["Sand-/Weiß-Birke","Klein","Offenland","Zeisig; Tagfalter; Wildbienen"],["Sand-/Weiß-Birke","Mittel","Urban","Zeisig; Tagfalter; Wildbienen"],["Sand-/Weiß-Birke","Mittel","Wald","Zeisig; Tagfalter; Wildbienen"],["Sand-/Weiß-Birke","Mittel","Gewaesser","Zeisig; Tagfalter; Wildbienen"],["Sand-/Weiß-Birke","Mittel","Offenland","Zeisig; Tagfalter; Wildbienen"],["Sand-/Weiß-Birke","Gross","Urban","Zeisig; Tagfalter; Wildbienen"],["Sand-/Weiß-Birke","Gross","Wald","Zeisig; Tagfalter; Wildbienen"],["Sand-/Weiß-Birke","Gross","Gewaesser","Zeisig; Tagfalter; Wildbienen"],["Sand-/Weiß-Birke","Gross","Offenland","Zeisig; Tagfalter; Wildbienen"],["Hainbuche","Klein","Urban","Meisen; Wildbienen; Tagfalter"],["Hainbuche","Klein","Wald","Meisen; Wildbienen; Tagfalter"],["Hainbuche","Klein","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Hainbuche","Klein","Offenland","Meisen; Wildbienen; Tagfalter"],["Hainbuche","Mittel","Urban","Meisen; Wildbienen; Tagfalter"],["Hainbuche","Mittel","Wald","Meisen; Wildbienen; Tagfalter"],["Hainbuche","Mittel","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Hainbuche","Mittel","Offenland","Meisen; Wildbienen; Tagfalter"],["Hainbuche","Gross","Urban","Meisen; Wildbienen; Tagfalter"],["Hainbuche","Gross","Wald","Meisen; Wildbienen; Tagfalter"],["Hainbuche","Gross","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Hainbuche","Gross","Offenland","Meisen; Wildbienen; Tagfalter"],["Edelkastanie","Klein","Urban","Meisen; Wildbienen; Tagfalter"],["Edelkastanie","Klein","Wald","Meisen; Wildbienen; Tagfalter"],["Edelkastanie","Klein","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Edelkastanie","Klein","Offenland","Meisen; Wildbienen; Tagfalter"],["Edelkastanie","Mittel","Urban","Meisen; Wildbienen; Tagfalter"],["Edelkastanie","Mittel","Wald","Meisen; Wildbienen; Tagfalter"],["Edelkastanie","Mittel","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Edelkastanie","Mittel","Offenland","Meisen; Wildbienen; Tagfalter"],["Edelkastanie","Gross","Urban","Meisen; Wildbienen; Tagfalter"],["Edelkastanie","Gross","Wald","Meisen; Wildbienen; Tagfalter"],["Edelkastanie","Gross","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Edelkastanie","Gross","Offenland","Meisen; Wildbienen; Tagfalter"],["Baum-Hasel","Klein","Urban","Meisen; Wildbienen; Tagfalter"],["Baum-Hasel","Klein","Wald","Meisen; Wildbienen; Tagfalter"],["Baum-Hasel","Klein","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Baum-Hasel","Klein","Offenland","Meisen; Wildbienen; Tagfalter"],["Baum-Hasel","Mittel","Urban","Meisen; Wildbienen; Tagfalter"],["Baum-Hasel","Mittel","Wald","Meisen; Wildbienen; Tagfalter"],["Baum-Hasel","Mittel","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Baum-Hasel","Mittel","Offenland","Meisen; Wildbienen; Tagfalter"],["Baum-Hasel","Gross","Urban","Meisen; Wildbienen; Tagfalter"],["Baum-Hasel","Gross","Wald","Meisen; Wildbienen; Tagfalter"],["Baum-Hasel","Gross","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Baum-Hasel","Gross","Offenland","Meisen; Wildbienen; Tagfalter"],["Buchen in Sorten","Klein","Urban","Buntspecht; Waldkauz; Fledermäuse; Totholzkäfer"],["Buchen in Sorten","Klein","Wald","Buntspecht; Waldkauz; Fledermäuse; Totholzkäfer"],["Buchen in Sorten","Klein","Gewaesser","Buntspecht; Waldkauz; Fledermäuse; Totholzkäfer"],["Buchen in Sorten","Klein","Offenland","Buntspecht; Waldkauz; Fledermäuse; Totholzkäfer"],["Buchen in Sorten","Mittel","Urban","Buntspecht; Waldkauz; Fledermäuse; Totholzkäfer"],["Buchen in Sorten","Mittel","Wald","Buntspecht; Waldkauz; Fledermäuse; Totholzkäfer"],["Buchen in Sorten","Mittel","Gewaesser","Buntspecht; Waldkauz; Fledermäuse; Totholzkäfer"],["Buchen in Sorten","Mittel","Offenland","Buntspecht; Waldkauz; Fledermäuse; Totholzkäfer"],["Buchen in Sorten","Gross","Urban","Buntspecht; Waldkauz; Fledermäuse; Totholzkäfer"],["Buchen in Sorten","Gross","Wald","Buntspecht; Waldkauz; Fledermäuse; Totholzkäfer"],["Buchen in Sorten","Gross","Gewaesser","Buntspecht; Waldkauz; Fledermäuse; Totholzkäfer"],["Buchen in Sorten","Gross","Offenland","Buntspecht; Waldkauz; Fledermäuse; Totholzkäfer"],["Eschen in Sorten","Klein","Urban","Meisen; Wildbienen; Tagfalter"],["Eschen in Sorten","Klein","Wald","Meisen; Wildbienen; Tagfalter"],["Eschen in Sorten","Klein","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Eschen in Sorten","Klein","Offenland","Meisen; Wildbienen; Tagfalter"],["Eschen in Sorten","Mittel","Urban","Meisen; Wildbienen; Tagfalter"],["Eschen in Sorten","Mittel","Wald","Meisen; Wildbienen; Tagfalter"],["Eschen in Sorten","Mittel","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Eschen in Sorten","Mittel","Offenland","Meisen; Wildbienen; Tagfalter"],["Eschen in Sorten","Gross","Urban","Meisen; Wildbienen; Tagfalter"],["Eschen in Sorten","Gross","Wald","Meisen; Wildbienen; Tagfalter"],["Eschen in Sorten","Gross","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Eschen in Sorten","Gross","Offenland","Meisen; Wildbienen; Tagfalter"],["Walnuss","Klein","Urban","Meisen; Wildbienen; Tagfalter"],["Walnuss","Klein","Wald","Meisen; Wildbienen; Tagfalter"],["Walnuss","Klein","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Walnuss","Klein","Offenland","Meisen; Wildbienen; Tagfalter"],["Walnuss","Mittel","Urban","Meisen; Wildbienen; Tagfalter"],["Walnuss","Mittel","Wald","Meisen; Wildbienen; Tagfalter"],["Walnuss","Mittel","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Walnuss","Mittel","Offenland","Meisen; Wildbienen; Tagfalter"],["Walnuss","Gross","Urban","Meisen; Wildbienen; Tagfalter"],["Walnuss","Gross","Wald","Meisen; Wildbienen; Tagfalter"],["Walnuss","Gross","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Walnuss","Gross","Offenland","Meisen; Wildbienen; Tagfalter"],["Amberbaum","Klein","Urban","Meisen; Wildbienen; Tagfalter"],["Amberbaum","Klein","Wald","Meisen; Wildbienen; Tagfalter"],["Amberbaum","Klein","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Amberbaum","Klein","Offenland","Meisen; Wildbienen; Tagfalter"],["Amberbaum","Mittel","Urban","Meisen; Wildbienen; Tagfalter"],["Amberbaum","Mittel","Wald","Meisen; Wildbienen; Tagfalter"],["Amberbaum","Mittel","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Amberbaum","Mittel","Offenland","Meisen; Wildbienen; Tagfalter"],["Amberbaum","Gross","Urban","Meisen; Wildbienen; Tagfalter"],["Amberbaum","Gross","Wald","Meisen; Wildbienen; Tagfalter"],["Amberbaum","Gross","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Amberbaum","Gross","Offenland","Meisen; Wildbienen; Tagfalter"],["Tulpenbaum","Klein","Urban","Meisen; Wildbienen; Tagfalter"],["Tulpenbaum","Klein","Wald","Meisen; Wildbienen; Tagfalter"],["Tulpenbaum","Klein","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Tulpenbaum","Klein","Offenland","Meisen; Wildbienen; Tagfalter"],["Tulpenbaum","Mittel","Urban","Meisen; Wildbienen; Tagfalter"],["Tulpenbaum","Mittel","Wald","Meisen; Wildbienen; Tagfalter"],["Tulpenbaum","Mittel","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Tulpenbaum","Mittel","Offenland","Meisen; Wildbienen; Tagfalter"],["Tulpenbaum","Gross","Urban","Meisen; Wildbienen; Tagfalter"],["Tulpenbaum","Gross","Wald","Meisen; Wildbienen; Tagfalter"],["Tulpenbaum","Gross","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Tulpenbaum","Gross","Offenland","Meisen; Wildbienen; Tagfalter"],["Nymphenbaum","Klein","Urban","Meisen; Wildbienen; Tagfalter"],["Nymphenbaum","Klein","Wald","Meisen; Wildbienen; Tagfalter"],["Nymphenbaum","Klein","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Nymphenbaum","Klein","Offenland","Meisen; Wildbienen; Tagfalter"],["Nymphenbaum","Mittel","Urban","Meisen; Wildbienen; Tagfalter"],["Nymphenbaum","Mittel","Wald","Meisen; Wildbienen; Tagfalter"],["Nymphenbaum","Mittel","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Nymphenbaum","Mittel","Offenland","Meisen; Wildbienen; Tagfalter"],["Nymphenbaum","Gross","Urban","Meisen; Wildbienen; Tagfalter"],["Nymphenbaum","Gross","Wald","Meisen; Wildbienen; Tagfalter"],["Nymphenbaum","Gross","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Nymphenbaum","Gross","Offenland","Meisen; Wildbienen; Tagfalter"],["Hopfenbuche","Klein","Urban","Meisen; Wildbienen; Tagfalter"],["Hopfenbuche","Klein","Wald","Meisen; Wildbienen; Tagfalter"],["Hopfenbuche","Klein","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Hopfenbuche","Klein","Offenland","Meisen; Wildbienen; Tagfalter"],["Hopfenbuche","Mittel","Urban","Meisen; Wildbienen; Tagfalter"],["Hopfenbuche","Mittel","Wald","Meisen; Wildbienen; Tagfalter"],["Hopfenbuche","Mittel","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Hopfenbuche","Mittel","Offenland","Meisen; Wildbienen; Tagfalter"],["Hopfenbuche","Gross","Urban","Meisen; Wildbienen; Tagfalter"],["Hopfenbuche","Gross","Wald","Meisen; Wildbienen; Tagfalter"],["Hopfenbuche","Gross","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Hopfenbuche","Gross","Offenland","Meisen; Wildbienen; Tagfalter"],["Eichen in Sorten","Klein","Urban","Mittelspecht; Hirschkäfer; Heldbock; Abendsegler"],["Eichen in Sorten","Klein","Wald","Mittelspecht; Hirschkäfer; Heldbock; Abendsegler"],["Eichen in Sorten","Klein","Gewaesser","Mittelspecht; Hirschkäfer; Heldbock; Abendsegler"],["Eichen in Sorten","Klein","Offenland","Mittelspecht; Hirschkäfer; Heldbock; Abendsegler"],["Eichen in Sorten","Mittel","Urban","Mittelspecht; Hirschkäfer; Heldbock; Abendsegler"],["Eichen in Sorten","Mittel","Wald","Mittelspecht; Hirschkäfer; Heldbock; Abendsegler"],["Eichen in Sorten","Mittel","Gewaesser","Mittelspecht; Hirschkäfer; Heldbock; Abendsegler"],["Eichen in Sorten","Mittel","Offenland","Mittelspecht; Hirschkäfer; Heldbock; Abendsegler"],["Eichen in Sorten","Gross","Urban","Mittelspecht; Hirschkäfer; Heldbock; Abendsegler"],["Eichen in Sorten","Gross","Wald","Mittelspecht; Hirschkäfer; Heldbock; Abendsegler"],["Eichen in Sorten","Gross","Gewaesser","Mittelspecht; Hirschkäfer; Heldbock; Abendsegler"],["Eichen in Sorten","Gross","Offenland","Mittelspecht; Hirschkäfer; Heldbock; Abendsegler"],["Paulownia","Klein","Urban","Honigbienen; Hummeln"],["Paulownia","Klein","Wald","Honigbienen; Hummeln"],["Paulownia","Klein","Gewaesser","Honigbienen; Hummeln"],["Paulownia","Klein","Offenland","Honigbienen; Hummeln"],["Paulownia","Mittel","Urban","Honigbienen; Hummeln"],["Paulownia","Mittel","Wald","Honigbienen; Hummeln"],["Paulownia","Mittel","Gewaesser","Honigbienen; Hummeln"],["Paulownia","Mittel","Offenland","Honigbienen; Hummeln"],["Paulownia","Gross","Urban","Honigbienen; Hummeln"],["Paulownia","Gross","Wald","Honigbienen; Hummeln"],["Paulownia","Gross","Gewaesser","Honigbienen; Hummeln"],["Paulownia","Gross","Offenland","Honigbienen; Hummeln"],["Linden in Sorten","Klein","Urban","Honigbienen; Hummeln; Grünspecht; Abendsegler"],["Linden in Sorten","Klein","Wald","Honigbienen; Hummeln; Grünspecht; Abendsegler"],["Linden in Sorten","Klein","Gewaesser","Honigbienen; Hummeln; Grünspecht; Abendsegler"],["Linden in Sorten","Klein","Offenland","Honigbienen; Hummeln; Grünspecht; Abendsegler"],["Linden in Sorten","Mittel","Urban","Honigbienen; Hummeln; Grünspecht; Abendsegler"],["Linden in Sorten","Mittel","Wald","Honigbienen; Hummeln; Grünspecht; Abendsegler"],["Linden in Sorten","Mittel","Gewaesser","Honigbienen; Hummeln; Grünspecht; Abendsegler"],["Linden in Sorten","Mittel","Offenland","Honigbienen; Hummeln; Grünspecht; Abendsegler"],["Linden in Sorten","Gross","Urban","Honigbienen; Hummeln; Grünspecht; Abendsegler"],["Linden in Sorten","Gross","Wald","Honigbienen; Hummeln; Grünspecht; Abendsegler"],["Linden in Sorten","Gross","Gewaesser","Honigbienen; Hummeln; Grünspecht; Abendsegler"],["Linden in Sorten","Gross","Offenland","Honigbienen; Hummeln; Grünspecht; Abendsegler"],["Ulmen in Sorten","Klein","Urban","Ulmenzipfelfalter; Meisen; Fledermäuse"],["Ulmen in Sorten","Klein","Wald","Ulmenzipfelfalter; Meisen; Fledermäuse"],["Ulmen in Sorten","Klein","Gewaesser","Ulmenzipfelfalter; Meisen; Fledermäuse"],["Ulmen in Sorten","Klein","Offenland","Ulmenzipfelfalter; Meisen; Fledermäuse"],["Ulmen in Sorten","Mittel","Urban","Ulmenzipfelfalter; Meisen; Fledermäuse"],["Ulmen in Sorten","Mittel","Wald","Ulmenzipfelfalter; Meisen; Fledermäuse"],["Ulmen in Sorten","Mittel","Gewaesser","Ulmenzipfelfalter; Meisen; Fledermäuse"],["Ulmen in Sorten","Mittel","Offenland","Ulmenzipfelfalter; Meisen; Fledermäuse"],["Ulmen in Sorten","Gross","Urban","Ulmenzipfelfalter; Meisen; Fledermäuse"],["Ulmen in Sorten","Gross","Wald","Ulmenzipfelfalter; Meisen; Fledermäuse"],["Ulmen in Sorten","Gross","Gewaesser","Ulmenzipfelfalter; Meisen; Fledermäuse"],["Ulmen in Sorten","Gross","Offenland","Ulmenzipfelfalter; Meisen; Fledermäuse"],["Feld-Ahorn","Klein","Urban","Meisen; Wildbienen; Tagfalter"],["Feld-Ahorn","Klein","Wald","Meisen; Wildbienen; Tagfalter"],["Feld-Ahorn","Klein","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Feld-Ahorn","Klein","Offenland","Meisen; Wildbienen; Tagfalter"],["Feld-Ahorn","Mittel","Urban","Meisen; Wildbienen; Tagfalter"],["Feld-Ahorn","Mittel","Wald","Meisen; Wildbienen; Tagfalter"],["Feld-Ahorn","Mittel","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Feld-Ahorn","Mittel","Offenland","Meisen; Wildbienen; Tagfalter"],["Feld-Ahorn","Gross","Urban","Meisen; Wildbienen; Tagfalter"],["Feld-Ahorn","Gross","Wald","Meisen; Wildbienen; Tagfalter"],["Feld-Ahorn","Gross","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Feld-Ahorn","Gross","Offenland","Meisen; Wildbienen; Tagfalter"],["Kupfer-Felsenbirne","Klein","Urban","Meisen; Wildbienen; Tagfalter"],["Kupfer-Felsenbirne","Klein","Wald","Meisen; Wildbienen; Tagfalter"],["Kupfer-Felsenbirne","Klein","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Kupfer-Felsenbirne","Klein","Offenland","Meisen; Wildbienen; Tagfalter"],["Kupfer-Felsenbirne","Mittel","Urban","Meisen; Wildbienen; Tagfalter"],["Kupfer-Felsenbirne","Mittel","Wald","Meisen; Wildbienen; Tagfalter"],["Kupfer-Felsenbirne","Mittel","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Kupfer-Felsenbirne","Mittel","Offenland","Meisen; Wildbienen; Tagfalter"],["Kupfer-Felsenbirne","Gross","Urban","Meisen; Wildbienen; Tagfalter"],["Kupfer-Felsenbirne","Gross","Wald","Meisen; Wildbienen; Tagfalter"],["Kupfer-Felsenbirne","Gross","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Kupfer-Felsenbirne","Gross","Offenland","Meisen; Wildbienen; Tagfalter"],["Kornelkirsche","Klein","Urban","Meisen; Wildbienen; Tagfalter"],["Kornelkirsche","Klein","Wald","Meisen; Wildbienen; Tagfalter"],["Kornelkirsche","Klein","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Kornelkirsche","Klein","Offenland","Meisen; Wildbienen; Tagfalter"],["Kornelkirsche","Mittel","Urban","Meisen; Wildbienen; Tagfalter"],["Kornelkirsche","Mittel","Wald","Meisen; Wildbienen; Tagfalter"],["Kornelkirsche","Mittel","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Kornelkirsche","Mittel","Offenland","Meisen; Wildbienen; Tagfalter"],["Kornelkirsche","Gross","Urban","Meisen; Wildbienen; Tagfalter"],["Kornelkirsche","Gross","Wald","Meisen; Wildbienen; Tagfalter"],["Kornelkirsche","Gross","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Kornelkirsche","Gross","Offenland","Meisen; Wildbienen; Tagfalter"],["Zweigriffliger Weißdorn","Klein","Urban","Meisen; Wildbienen; Tagfalter"],["Zweigriffliger Weißdorn","Klein","Wald","Meisen; Wildbienen; Tagfalter"],["Zweigriffliger Weißdorn","Klein","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Zweigriffliger Weißdorn","Klein","Offenland","Meisen; Wildbienen; Tagfalter"],["Zweigriffliger Weißdorn","Mittel","Urban","Meisen; Wildbienen; Tagfalter"],["Zweigriffliger Weißdorn","Mittel","Wald","Meisen; Wildbienen; Tagfalter"],["Zweigriffliger Weißdorn","Mittel","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Zweigriffliger Weißdorn","Mittel","Offenland","Meisen; Wildbienen; Tagfalter"],["Zweigriffliger Weißdorn","Gross","Urban","Meisen; Wildbienen; Tagfalter"],["Zweigriffliger Weißdorn","Gross","Wald","Meisen; Wildbienen; Tagfalter"],["Zweigriffliger Weißdorn","Gross","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Zweigriffliger Weißdorn","Gross","Offenland","Meisen; Wildbienen; Tagfalter"],["Echter Rotdorn","Klein","Urban","Meisen; Wildbienen; Tagfalter"],["Echter Rotdorn","Klein","Wald","Meisen; Wildbienen; Tagfalter"],["Echter Rotdorn","Klein","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Echter Rotdorn","Klein","Offenland","Meisen; Wildbienen; Tagfalter"],["Echter Rotdorn","Mittel","Urban","Meisen; Wildbienen; Tagfalter"],["Echter Rotdorn","Mittel","Wald","Meisen; Wildbienen; Tagfalter"],["Echter Rotdorn","Mittel","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Echter Rotdorn","Mittel","Offenland","Meisen; Wildbienen; Tagfalter"],["Echter Rotdorn","Gross","Urban","Meisen; Wildbienen; Tagfalter"],["Echter Rotdorn","Gross","Wald","Meisen; Wildbienen; Tagfalter"],["Echter Rotdorn","Gross","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Echter Rotdorn","Gross","Offenland","Meisen; Wildbienen; Tagfalter"],["Apfeldorn","Klein","Urban","Meisen; Wildbienen; Tagfalter"],["Apfeldorn","Klein","Wald","Meisen; Wildbienen; Tagfalter"],["Apfeldorn","Klein","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Apfeldorn","Klein","Offenland","Meisen; Wildbienen; Tagfalter"],["Apfeldorn","Mittel","Urban","Meisen; Wildbienen; Tagfalter"],["Apfeldorn","Mittel","Wald","Meisen; Wildbienen; Tagfalter"],["Apfeldorn","Mittel","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Apfeldorn","Mittel","Offenland","Meisen; Wildbienen; Tagfalter"],["Apfeldorn","Gross","Urban","Meisen; Wildbienen; Tagfalter"],["Apfeldorn","Gross","Wald","Meisen; Wildbienen; Tagfalter"],["Apfeldorn","Gross","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Apfeldorn","Gross","Offenland","Meisen; Wildbienen; Tagfalter"],["Blumen-Esche","Klein","Urban","Meisen; Wildbienen; Tagfalter"],["Blumen-Esche","Klein","Wald","Meisen; Wildbienen; Tagfalter"],["Blumen-Esche","Klein","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Blumen-Esche","Klein","Offenland","Meisen; Wildbienen; Tagfalter"],["Blumen-Esche","Mittel","Urban","Meisen; Wildbienen; Tagfalter"],["Blumen-Esche","Mittel","Wald","Meisen; Wildbienen; Tagfalter"],["Blumen-Esche","Mittel","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Blumen-Esche","Mittel","Offenland","Meisen; Wildbienen; Tagfalter"],["Blumen-Esche","Gross","Urban","Meisen; Wildbienen; Tagfalter"],["Blumen-Esche","Gross","Wald","Meisen; Wildbienen; Tagfalter"],["Blumen-Esche","Gross","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Blumen-Esche","Gross","Offenland","Meisen; Wildbienen; Tagfalter"],["Magnolien in Sorten","Klein","Urban","Meisen; Wildbienen; Tagfalter"],["Magnolien in Sorten","Klein","Wald","Meisen; Wildbienen; Tagfalter"],["Magnolien in Sorten","Klein","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Magnolien in Sorten","Klein","Offenland","Meisen; Wildbienen; Tagfalter"],["Magnolien in Sorten","Mittel","Urban","Meisen; Wildbienen; Tagfalter"],["Magnolien in Sorten","Mittel","Wald","Meisen; Wildbienen; Tagfalter"],["Magnolien in Sorten","Mittel","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Magnolien in Sorten","Mittel","Offenland","Meisen; Wildbienen; Tagfalter"],["Magnolien in Sorten","Gross","Urban","Meisen; Wildbienen; Tagfalter"],["Magnolien in Sorten","Gross","Wald","Meisen; Wildbienen; Tagfalter"],["Magnolien in Sorten","Gross","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Magnolien in Sorten","Gross","Offenland","Meisen; Wildbienen; Tagfalter"],["Zierapfel","Klein","Urban","Meisen; Wildbienen; Tagfalter"],["Zierapfel","Klein","Wald","Meisen; Wildbienen; Tagfalter"],["Zierapfel","Klein","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Zierapfel","Klein","Offenland","Meisen; Wildbienen; Tagfalter"],["Zierapfel","Mittel","Urban","Meisen; Wildbienen; Tagfalter"],["Zierapfel","Mittel","Wald","Meisen; Wildbienen; Tagfalter"],["Zierapfel","Mittel","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Zierapfel","Mittel","Offenland","Meisen; Wildbienen; Tagfalter"],["Zierapfel","Gross","Urban","Meisen; Wildbienen; Tagfalter"],["Zierapfel","Gross","Wald","Meisen; Wildbienen; Tagfalter"],["Zierapfel","Gross","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Zierapfel","Gross","Offenland","Meisen; Wildbienen; Tagfalter"],["Holzapfel","Klein","Urban","Meisen; Wildbienen; Tagfalter"],["Holzapfel","Klein","Wald","Meisen; Wildbienen; Tagfalter"],["Holzapfel","Klein","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Holzapfel","Klein","Offenland","Meisen; Wildbienen; Tagfalter"],["Holzapfel","Mittel","Urban","Meisen; Wildbienen; Tagfalter"],["Holzapfel","Mittel","Wald","Meisen; Wildbienen; Tagfalter"],["Holzapfel","Mittel","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Holzapfel","Mittel","Offenland","Meisen; Wildbienen; Tagfalter"],["Holzapfel","Gross","Urban","Meisen; Wildbienen; Tagfalter"],["Holzapfel","Gross","Wald","Meisen; Wildbienen; Tagfalter"],["Holzapfel","Gross","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Holzapfel","Gross","Offenland","Meisen; Wildbienen; Tagfalter"],["Mispel","Klein","Urban","Meisen; Wildbienen; Tagfalter"],["Mispel","Klein","Wald","Meisen; Wildbienen; Tagfalter"],["Mispel","Klein","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Mispel","Klein","Offenland","Meisen; Wildbienen; Tagfalter"],["Mispel","Mittel","Urban","Meisen; Wildbienen; Tagfalter"],["Mispel","Mittel","Wald","Meisen; Wildbienen; Tagfalter"],["Mispel","Mittel","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Mispel","Mittel","Offenland","Meisen; Wildbienen; Tagfalter"],["Mispel","Gross","Urban","Meisen; Wildbienen; Tagfalter"],["Mispel","Gross","Wald","Meisen; Wildbienen; Tagfalter"],["Mispel","Gross","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Mispel","Gross","Offenland","Meisen; Wildbienen; Tagfalter"],["Maulbeerbaum","Klein","Urban","Meisen; Wildbienen; Tagfalter"],["Maulbeerbaum","Klein","Wald","Meisen; Wildbienen; Tagfalter"],["Maulbeerbaum","Klein","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Maulbeerbaum","Klein","Offenland","Meisen; Wildbienen; Tagfalter"],["Maulbeerbaum","Mittel","Urban","Meisen; Wildbienen; Tagfalter"],["Maulbeerbaum","Mittel","Wald","Meisen; Wildbienen; Tagfalter"],["Maulbeerbaum","Mittel","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Maulbeerbaum","Mittel","Offenland","Meisen; Wildbienen; Tagfalter"],["Maulbeerbaum","Gross","Urban","Meisen; Wildbienen; Tagfalter"],["Maulbeerbaum","Gross","Wald","Meisen; Wildbienen; Tagfalter"],["Maulbeerbaum","Gross","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Maulbeerbaum","Gross","Offenland","Meisen; Wildbienen; Tagfalter"],["Eisenholzbaum","Klein","Urban","Meisen; Wildbienen; Tagfalter"],["Eisenholzbaum","Klein","Wald","Meisen; Wildbienen; Tagfalter"],["Eisenholzbaum","Klein","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Eisenholzbaum","Klein","Offenland","Meisen; Wildbienen; Tagfalter"],["Eisenholzbaum","Mittel","Urban","Meisen; Wildbienen; Tagfalter"],["Eisenholzbaum","Mittel","Wald","Meisen; Wildbienen; Tagfalter"],["Eisenholzbaum","Mittel","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Eisenholzbaum","Mittel","Offenland","Meisen; Wildbienen; Tagfalter"],["Eisenholzbaum","Gross","Urban","Meisen; Wildbienen; Tagfalter"],["Eisenholzbaum","Gross","Wald","Meisen; Wildbienen; Tagfalter"],["Eisenholzbaum","Gross","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Eisenholzbaum","Gross","Offenland","Meisen; Wildbienen; Tagfalter"],["Vogel-Kirsche","Klein","Urban","Singdrossel; Star; Wildbienen"],["Vogel-Kirsche","Klein","Wald","Singdrossel; Star; Wildbienen"],["Vogel-Kirsche","Klein","Gewaesser","Singdrossel; Star; Wildbienen"],["Vogel-Kirsche","Klein","Offenland","Singdrossel; Star; Wildbienen"],["Vogel-Kirsche","Mittel","Urban","Singdrossel; Star; Wildbienen"],["Vogel-Kirsche","Mittel","Wald","Singdrossel; Star; Wildbienen"],["Vogel-Kirsche","Mittel","Gewaesser","Singdrossel; Star; Wildbienen"],["Vogel-Kirsche","Mittel","Offenland","Singdrossel; Star; Wildbienen"],["Vogel-Kirsche","Gross","Urban","Singdrossel; Star; Wildbienen"],["Vogel-Kirsche","Gross","Wald","Singdrossel; Star; Wildbienen"],["Vogel-Kirsche","Gross","Gewaesser","Singdrossel; Star; Wildbienen"],["Vogel-Kirsche","Gross","Offenland","Singdrossel; Star; Wildbienen"],["Steinweichsel","Klein","Urban","Meisen; Wildbienen; Tagfalter"],["Steinweichsel","Klein","Wald","Meisen; Wildbienen; Tagfalter"],["Steinweichsel","Klein","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Steinweichsel","Klein","Offenland","Meisen; Wildbienen; Tagfalter"],["Steinweichsel","Mittel","Urban","Meisen; Wildbienen; Tagfalter"],["Steinweichsel","Mittel","Wald","Meisen; Wildbienen; Tagfalter"],["Steinweichsel","Mittel","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Steinweichsel","Mittel","Offenland","Meisen; Wildbienen; Tagfalter"],["Steinweichsel","Gross","Urban","Meisen; Wildbienen; Tagfalter"],["Steinweichsel","Gross","Wald","Meisen; Wildbienen; Tagfalter"],["Steinweichsel","Gross","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Steinweichsel","Gross","Offenland","Meisen; Wildbienen; Tagfalter"],["Trauben-Kirsche","Klein","Urban","Meisen; Wildbienen; Tagfalter"],["Trauben-Kirsche","Klein","Wald","Meisen; Wildbienen; Tagfalter"],["Trauben-Kirsche","Klein","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Trauben-Kirsche","Klein","Offenland","Meisen; Wildbienen; Tagfalter"],["Trauben-Kirsche","Mittel","Urban","Meisen; Wildbienen; Tagfalter"],["Trauben-Kirsche","Mittel","Wald","Meisen; Wildbienen; Tagfalter"],["Trauben-Kirsche","Mittel","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Trauben-Kirsche","Mittel","Offenland","Meisen; Wildbienen; Tagfalter"],["Trauben-Kirsche","Gross","Urban","Meisen; Wildbienen; Tagfalter"],["Trauben-Kirsche","Gross","Wald","Meisen; Wildbienen; Tagfalter"],["Trauben-Kirsche","Gross","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Trauben-Kirsche","Gross","Offenland","Meisen; Wildbienen; Tagfalter"],["Zier-Kirsche","Klein","Urban","Meisen; Wildbienen; Tagfalter"],["Zier-Kirsche","Klein","Wald","Meisen; Wildbienen; Tagfalter"],["Zier-Kirsche","Klein","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Zier-Kirsche","Klein","Offenland","Meisen; Wildbienen; Tagfalter"],["Zier-Kirsche","Mittel","Urban","Meisen; Wildbienen; Tagfalter"],["Zier-Kirsche","Mittel","Wald","Meisen; Wildbienen; Tagfalter"],["Zier-Kirsche","Mittel","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Zier-Kirsche","Mittel","Offenland","Meisen; Wildbienen; Tagfalter"],["Zier-Kirsche","Gross","Urban","Meisen; Wildbienen; Tagfalter"],["Zier-Kirsche","Gross","Wald","Meisen; Wildbienen; Tagfalter"],["Zier-Kirsche","Gross","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Zier-Kirsche","Gross","Offenland","Meisen; Wildbienen; Tagfalter"],["Wildbirne","Klein","Urban","Neuntöter; Wildbienen; Falter"],["Wildbirne","Klein","Wald","Neuntöter; Wildbienen; Falter"],["Wildbirne","Klein","Gewaesser","Neuntöter; Wildbienen; Falter"],["Wildbirne","Klein","Offenland","Neuntöter; Wildbienen; Falter"],["Wildbirne","Mittel","Urban","Neuntöter; Wildbienen; Falter"],["Wildbirne","Mittel","Wald","Neuntöter; Wildbienen; Falter"],["Wildbirne","Mittel","Gewaesser","Neuntöter; Wildbienen; Falter"],["Wildbirne","Mittel","Offenland","Neuntöter; Wildbienen; Falter"],["Wildbirne","Gross","Urban","Neuntöter; Wildbienen; Falter"],["Wildbirne","Gross","Wald","Neuntöter; Wildbienen; Falter"],["Wildbirne","Gross","Gewaesser","Neuntöter; Wildbienen; Falter"],["Wildbirne","Gross","Offenland","Neuntöter; Wildbienen; Falter"],["Zier-Birne","Klein","Urban","Meisen; Wildbienen; Tagfalter"],["Zier-Birne","Klein","Wald","Meisen; Wildbienen; Tagfalter"],["Zier-Birne","Klein","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Zier-Birne","Klein","Offenland","Meisen; Wildbienen; Tagfalter"],["Zier-Birne","Mittel","Urban","Meisen; Wildbienen; Tagfalter"],["Zier-Birne","Mittel","Wald","Meisen; Wildbienen; Tagfalter"],["Zier-Birne","Mittel","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Zier-Birne","Mittel","Offenland","Meisen; Wildbienen; Tagfalter"],["Zier-Birne","Gross","Urban","Meisen; Wildbienen; Tagfalter"],["Zier-Birne","Gross","Wald","Meisen; Wildbienen; Tagfalter"],["Zier-Birne","Gross","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Zier-Birne","Gross","Offenland","Meisen; Wildbienen; Tagfalter"],["Mehlbeere","Klein","Urban","Meisen; Wildbienen; Tagfalter"],["Mehlbeere","Klein","Wald","Meisen; Wildbienen; Tagfalter"],["Mehlbeere","Klein","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Mehlbeere","Klein","Offenland","Meisen; Wildbienen; Tagfalter"],["Mehlbeere","Mittel","Urban","Meisen; Wildbienen; Tagfalter"],["Mehlbeere","Mittel","Wald","Meisen; Wildbienen; Tagfalter"],["Mehlbeere","Mittel","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Mehlbeere","Mittel","Offenland","Meisen; Wildbienen; Tagfalter"],["Mehlbeere","Gross","Urban","Meisen; Wildbienen; Tagfalter"],["Mehlbeere","Gross","Wald","Meisen; Wildbienen; Tagfalter"],["Mehlbeere","Gross","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Mehlbeere","Gross","Offenland","Meisen; Wildbienen; Tagfalter"],["Eberesche","Klein","Urban","Dompfaff; Wacholderdrossel; Wildbienen"],["Eberesche","Klein","Wald","Dompfaff; Wacholderdrossel; Wildbienen"],["Eberesche","Klein","Gewaesser","Dompfaff; Wacholderdrossel; Wildbienen"],["Eberesche","Klein","Offenland","Dompfaff; Wacholderdrossel; Wildbienen"],["Eberesche","Mittel","Urban","Dompfaff; Wacholderdrossel; Wildbienen"],["Eberesche","Mittel","Wald","Dompfaff; Wacholderdrossel; Wildbienen"],["Eberesche","Mittel","Gewaesser","Dompfaff; Wacholderdrossel; Wildbienen"],["Eberesche","Mittel","Offenland","Dompfaff; Wacholderdrossel; Wildbienen"],["Eberesche","Gross","Urban","Dompfaff; Wacholderdrossel; Wildbienen"],["Eberesche","Gross","Wald","Dompfaff; Wacholderdrossel; Wildbienen"],["Eberesche","Gross","Gewaesser","Dompfaff; Wacholderdrossel; Wildbienen"],["Eberesche","Gross","Offenland","Dompfaff; Wacholderdrossel; Wildbienen"],["Speierling","Klein","Urban","Meisen; Wildbienen; Tagfalter"],["Speierling","Klein","Wald","Meisen; Wildbienen; Tagfalter"],["Speierling","Klein","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Speierling","Klein","Offenland","Meisen; Wildbienen; Tagfalter"],["Speierling","Mittel","Urban","Meisen; Wildbienen; Tagfalter"],["Speierling","Mittel","Wald","Meisen; Wildbienen; Tagfalter"],["Speierling","Mittel","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Speierling","Mittel","Offenland","Meisen; Wildbienen; Tagfalter"],["Speierling","Gross","Urban","Meisen; Wildbienen; Tagfalter"],["Speierling","Gross","Wald","Meisen; Wildbienen; Tagfalter"],["Speierling","Gross","Gewaesser","Meisen; Wildbienen; Tagfalter"],["Speierling","Gross","Offenland","Meisen; Wildbienen; Tagfalter"]];
+
+  const TREE_BAUMARTEN = [...new Set(TREE_DB.map(r => r[0]))];
+
+  const STANDORT_MAP = {
+    urban: 'Urban',
+    forest: 'Wald',
+    field: 'Offenland',
+    water: 'Gewaesser'
+  };
+  const STANDORT_LABELS = {
+    Urban: 'Urban / Stadt',
+    Wald: 'Wald',
+    Offenland: 'Feld / Offenland',
+    Gewaesser: 'Gewässer'
+  };
+
+  function normalize(str) {
+    return (str || '')
+      .toLowerCase()
+      .replace(/ß/g, 'ss')
+      .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+  }
+
+  // Findet die Baumart aus der Datenbank, die am besten zum von der KI erkannten Namen passt.
+  function matchBaumart(speciesName) {
+    if (!speciesName) return null;
+    // Klammerinhalt (lateinischer Name) entfernen
+    const cleaned = speciesName.replace(/\(.*?\)/g, ' ');
+    const tokens = normalize(cleaned).split(' ').filter(t => t.length > 2);
+
+    let best = null;
+    let bestScore = 0;
+    for (const baumart of TREE_BAUMARTEN) {
+      const dbTokens = normalize(baumart.replace(/in sorten/g, '')).split(' ').filter(t => t.length > 2);
+      let score = 0;
+      for (const t of tokens) {
+        for (const d of dbTokens) {
+          if (t === d || t.startsWith(d) || d.startsWith(t)) score++;
+        }
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        best = baumart;
+      }
+    }
+    return bestScore > 0 ? best : null;
+  }
+
+  // Bestimmt die Baumgrößen-Klasse anhand des Kronendurchmessers (m)
+  function groesseFromCrown(crownM) {
+    if (!crownM || isNaN(crownM)) return null;
+    if (crownM < 6) return 'Klein';
+    if (crownM <= 12) return 'Mittel';
+    return 'Gross';
+  }
+  const GROESSE_LABELS = { Klein: 'Klein', Mittel: 'Mittel', Gross: 'Groß' };
+
+  function lookupTreeDB(baumart, groesse, standort) {
+    if (!baumart) return null;
+    let row = TREE_DB.find(r => r[0] === baumart && r[1] === groesse && r[2] === standort);
+    if (!row) row = TREE_DB.find(r => r[0] === baumart && r[1] === groesse);
+    if (!row) row = TREE_DB.find(r => r[0] === baumart);
+    return row;
+  }
+
+  // Aktualisiert die Zuordnung Baumart/Größe/Standort -> Typische Arten (Schritt 5)
+  function updateHabitatMatch() {
+    const standort = STANDORT_MAP[locationType.value] || 'Urban';
+    const crownM = parseFloat(crownDiameterInput.value);
+    const groesse = groesseFromCrown(crownM);
+    const dbBaumart = matchBaumart(lastSpeciesName);
+
+    matchStandort.textContent = STANDORT_LABELS[standort] || standort;
+    matchGroesse.textContent = groesse ? GROESSE_LABELS[groesse] : '– (Kronendurchmesser fehlt)';
+
+    if (!dbBaumart) {
+      matchBaumart.textContent = lastSpeciesName ? `keine Zuordnung für "${lastSpeciesName}"` : '–';
+      matchArten.textContent = '–';
+      animalsBtn.disabled = true;
+      return;
+    }
+
+    matchBaumart.textContent = `${dbBaumart} (erkannt: ${lastSpeciesName})`;
+
+    const row = lookupTreeDB(dbBaumart, groesse, standort);
+    if (row) {
+      matchArten.textContent = row[3];
+      animalsBtn.disabled = false;
+    } else {
+      matchArten.textContent = '–';
+      animalsBtn.disabled = true;
+    }
+  }
+
+  locationType.addEventListener('change', updateHabitatMatch);
+
+  // --- KI: Top-5-Tierarten & passende Nist-/Fledermauskästen ---
+  animalsBtn.addEventListener('click', async () => {
+    animalsBtn.disabled = true;
+    animalsBtn.textContent = '🔄 Ermittle Tierarten …';
+    animalsHelp.textContent = '';
+    animalGrid.innerHTML = '';
+    try {
+      const standort = STANDORT_MAP[locationType.value] || 'Urban';
+      const crownM = parseFloat(crownDiameterInput.value);
+      const groesse = groesseFromCrown(crownM);
+      const dbBaumart = matchBaumart(lastSpeciesName);
+      const row = lookupTreeDB(dbBaumart, groesse, standort);
+      const typischeArten = row ? row[3] : '';
+
+      const animals = await identifyHabitatAnimals({
+        baumart: dbBaumart || lastSpeciesName,
+        standort: STANDORT_LABELS[standort] || standort,
+        typischeArten
+      });
+
+      renderAnimals(animals);
+    } catch (err) {
+      animalsHelp.textContent = `Fehler: ${err.message}`;
+    } finally {
+      animalsBtn.disabled = false;
+      animalsBtn.textContent = '🐦 Tierarten & Nistkästen ermitteln (KI)';
+    }
+  });
+
+  async function identifyHabitatAnimals({ baumart, standort, typischeArten }) {
+    const GEMINI_API_KEY = getGeminiApiKey();
+    if (!GEMINI_API_KEY) {
+      throw new Error('Kein API-Key eingetragen. Bitte oben einen Gemini API-Key eingeben und speichern.');
+    }
+
+    const prompt = 'Du bist Experte für Stadtökologie und Vogel-/Fledermausschutz in Deutschland. '
+      + `Ein Baum der Art "${baumart}" steht am Standort-Typ "${standort}". `
+      + `Aus unserer Wissensdatenbank sind für diese Baumart typischerweise folgende Tiergruppen/Arten bekannt: "${typischeArten}". `
+      + 'Nenne die 5 häufigsten Tiere, die an diesem Baum und Standort vorkommen könnten – '
+      + 'eine Mischung aus Vögeln, Insekten und Fledermäusen (orientiere dich an den genannten typischen Arten, '
+      + 'ergänze ggf. sinnvoll um regional passende Arten). '
+      + 'Gib für jedes Tier außerdem an, welcher Nistkasten- bzw. Fledermauskasten-Typ am besten geeignet ist '
+      + '(z. B. Meisen-Nistkasten, Halbhöhle, Fledermaus-Flachkasten, Insektenhotel/Wildbienen-Nisthilfe) '
+      + 'sowie die empfohlenen Maße (Innenmaße in cm: Höhe, Breite, Tiefe) und den Durchmesser der Einflugöffnung in mm '
+      + '(bei Insektenhilfen ggf. Lochdurchmesser-Bereich angeben, bei Fledermauskästen den Schlitz in mm). '
+      + 'Antworte ausschließlich als reines JSON-Array ohne Markdown, im Format: '
+      + '[{"name": "Tierart", "typ": "Vogel|Insekt|Fledermaus", '
+      + '"nistkasten_typ": "Bezeichnung des Kastens", '
+      + '"hoehe_cm": Zahl, "breite_cm": Zahl, "tiefe_cm": Zahl, '
+      + '"einflug_mm": "Durchmesser oder Bereich in mm als Text", '
+      + '"hinweis": "kurzer Tipp zu Anbringung/Ausrichtung, max. 1 Satz"}]';
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': GEMINI_API_KEY
+        },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }]
+        })
+      }
+    );
+
+    if (!response.ok) {
+      let detail = '';
+      try {
+        const errData = await response.json();
+        detail = errData?.error?.message || JSON.stringify(errData);
+      } catch (_) {}
+      throw new Error(`Gemini API-Fehler ${response.status}${detail ? ': ' + detail : ''}`);
+    }
+
+    const data = await response.json();
+    let text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    text = text.trim().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '');
+
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch (e) {
+      throw new Error('Antwort konnte nicht als JSON gelesen werden.');
+    }
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      throw new Error('Keine Tierarten ermittelt.');
+    }
+    return parsed.slice(0, 5);
+  }
+
+  const ANIMAL_ICONS = { Vogel: '🐦', Insekt: '🐝', Fledermaus: '🦇' };
+
+  function renderAnimals(animals) {
+    animalGrid.innerHTML = animals.map(a => {
+      const icon = ANIMAL_ICONS[a.typ] || '🌿';
+      const masse = [a.hoehe_cm, a.breite_cm, a.tiefe_cm]
+        .map(v => (v || v === 0) ? `${v} cm` : '–')
+        .join(' × ');
+      return `
+        <div class="animal-card">
+          <div class="a-head">
+            <span class="a-icon">${icon}</span>
+            <div>
+              <div class="a-name">${a.name || '–'}</div>
+              <div class="a-type">${a.typ || ''}</div>
+            </div>
+          </div>
+          <div class="a-box">
+            <div><b>${a.nistkasten_typ || 'Nistkasten'}</b></div>
+            <div>Innenmaße (H×B×T): ${masse}</div>
+            <div>Einflug/Öffnung: ${a.einflug_mm || '–'}</div>
+            ${a.hinweis ? `<div style="margin-top:0.3rem;">💡 ${a.hinweis}</div>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
   }
 
   // --- Wertigkeitsberechnung ---
