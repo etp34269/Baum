@@ -713,7 +713,7 @@
    * Anbindung an die Plant.id API (https://plant.id) zur Baumarterkennung.
    * Trage deinen API-Key unten bei PLANT_ID_API_KEY ein.
    */
-  const PLANT_ID_API_KEY = 'DEIN_API_KEY'; // <-- hier eigenen Key einsetzen
+  const PLANT_ID_API_KEY = 'yXBkWPd316AGL7XLNzOnyy0TDsJ5NHVIbsGUCFF1U8h5SDkdqF'; // <-- hier eigenen Key einsetzen
 
   async function identifyTreeSpecies(canvasEl) {
     if (PLANT_ID_API_KEY === 'DEIN_API_KEY') {
