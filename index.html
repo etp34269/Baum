@@ -199,7 +199,7 @@
         <input type="number" id="trunkDiameter" step="1" placeholder="z. B. 45" value="45">
       </div>
       <div>
-        <label for="crownVolume">Kronenvolumen (m³)</label>
+        <label for="crownVolume">Kronenfläche (m²)</label>
         <input type="number" id="crownVolume" step="1" placeholder="wird von der KI geschätzt" readonly>
       </div>
     </div>
@@ -565,8 +565,26 @@ async function geminiIdentify(canvasEl) {
   const trCm = parseFloat(trunkDiam.value)||45;
  
   // Prompt angepasst auf dreidimensionales Kronenvolumen (crown_volume_m3)
-  const prompt = `Du siehst ein Foto eines Baumes. Der Stammdurchmesser (BHD in 1,3m Hoehe) betraegt ${trCm} cm als Referenzgröße. Bestimme 1) die Baumart (bis zu 3 Vorschlaege) und 2) das geschätzte, dreidimensionale Kronenvolumen in Kubikmetern (m³). Antworte als reines JSON: {"species":[{"name":"Deutscher Name (Lat. Name)","confidence":0-100}],"crown_volume_m3":Zahl}`;
- 
+  const prompt = `Du siehst ein Foto eines Baumes.
+
+Der Stammdurchmesser (BHD in 1,3m Höhe) beträgt ${trCm} cm.
+
+Bestimme:
+
+1. die Baumart (bis zu 3 Vorschläge)
+2. den geschätzten Kronendurchmesser in Metern
+
+Antworte ausschließlich als JSON:
+
+{
+  "species":[
+    {
+      "name":"Deutscher Name (Lat. Name)",
+      "confidence":90
+    }
+  ],
+  "crown_diameter_m":12.5
+}`;
   const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GM}:generateContent`,{
     method:'POST', headers:{'Content-Type':'application/json','x-goog-api-key':key},
     body: JSON.stringify({contents:[{parts:[{text:prompt},{inline_data:{mime_type:'image/jpeg',data:b64}}]}]})
@@ -582,8 +600,18 @@ let text = (data?.candidates?.[0]?.content?.parts?.[0]?.text || '')
 
 const p = JSON.parse(text);
   if (!p?.species?.length) throw new Error('Keine Baumart erkannt.');
-  return { species: p.species.slice(0,3).map(s=>({name:s.name,confidence:Math.round(+s.confidence||0)})), crownVolumeM3: +p.crown_volume_m3||null };
-}
+const aiDiameter = +p.crown_diameter_m || 0;
+
+return {
+  species: p.species.slice(0,3).map(s=>({
+    name:s.name,
+    confidence:Math.round(+s.confidence||0)
+  })),
+  crownDiameterM:
+    aiDiameter > 0
+      ? aiDiameter * 0.70
+      : null
+};
 
 identifyBtn.addEventListener('click', async () => {
   identifyBtn.disabled=true; identifyBtn.textContent = '🔄 Erkenne Baumart …';
@@ -594,7 +622,26 @@ identifyBtn.addEventListener('click', async () => {
     const alts = r.species.slice(1).map(s=>`${s.name} (${s.confidence}%)`).join(', ');
     speciesConf.textContent = alts ? `Konfidenz: ${top.confidence}% · weitere: ${alts}` : `Konfidenz: ${top.confidence}%`;
     speciesBox.style.display='flex';
-    if (r.crownVolumeM3) { crownVolume.value=r.crownVolumeM3.toFixed(0); crownHelp.textContent=`KI-Schätzung: ${r.crownVolumeM3.toFixed(0)} m³`; calcFacade(); }
+ if (r.crownDiameterM) {
+const radius = crownDiameter / 2;
+const crownArea = Math.PI * radius * radius;
+  const crownDiameter =
+    r.crownDiameterM;
+
+  const radius =
+    crownDiameter / 2;
+
+  const crownArea =
+    Math.PI * radius * radius;
+
+  crownVolume.value =
+    crownArea.toFixed(1);
+
+  crownHelp.textContent =
+    `Kronendurchmesser: ${crownDiameter.toFixed(1)} m · Kronenfläche: ${crownArea.toFixed(1)} m²`;
+
+  calcFacade();
+}
     await updateFauna();
   } catch(e) { speciesName.textContent='Erkennung fehlgeschlagen'; speciesConf.textContent=e.message; speciesBox.style.display='flex'; }
   finally { identifyBtn.disabled=false; identifyBtn.textContent='🌳 Baumart erkennen'; }
