@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Baumwert – Erfassung &amp; Bewertung</title>
+<style>
+  :root {
+    --bg: #faf8f3; --bark: #3e2f23; --leaf: #4a6b3a; --leaf-light: #7fa86a;
+    --moss: #e8efe0; --paper: #ffffff; --line: #d9d2c4; --gold: #c98a3c;
+    --text: #2b2620; --text-soft: #6b6256;
+    --font-display: "Fraunces", Georgia, serif;
+    --font-body: "Inter", system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; font-family: var(--font-body); background: var(--bg); color: var(--text); line-height: 1.55; }
+
+  header.site { padding: 2.5rem 1.5rem 1.5rem; text-align: center; border-bottom: 1px solid var(--line); background: linear-gradient(180deg, var(--moss) 0%, var(--bg) 100%); }
+  .ring-mark { width: 64px; height: 64px; margin: 0 auto 1rem; display: block; }
+  header.site h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(2rem, 5vw, 3rem); margin: 0 0 0.4rem; letter-spacing: -0.01em; color: var(--bark); }
+  header.site p.tagline { color: var(--text-soft); margin: 0; font-size: 1.05rem; max-width: 38ch; margin-inline: auto; }
+
+  main { max-width: 920px; margin: 0 auto; padding: 2.5rem 1.5rem 5rem; display: grid; gap: 1.75rem; }
+  .card { background: var(--paper); border: 1px solid var(--line); border-radius: 14px; padding: 1.75rem; }
+  .card h2 { font-family: var(--font-display); font-size: 1.4rem; margin: 0 0 0.25rem; color: var(--bark); display: flex; align-items: baseline; gap: 0.6rem; }
+  .card h2 .step { font-family: var(--font-mono); font-size: 0.85rem; color: var(--leaf); border: 1px solid var(--leaf-light); border-radius: 999px; padding: 0.1rem 0.6rem; background: var(--moss); }
+  .card .hint { color: var(--text-soft); font-size: 0.92rem; margin: 0.25rem 0 1.25rem; }
+
+  .apikey-box { margin-bottom: 1rem; padding: 0.75rem 1rem; background: var(--moss); border: 1px solid var(--line); border-radius: 10px; }
+  .apikey-box label { display: block; font-size: 0.85rem; color: var(--text-soft); margin-bottom: 0.4rem; }
+  .apikey-box .row { display: flex; gap: 0.5rem; }
+  .apikey-box input[type="password"], .apikey-box input[type="text"] { flex: 1; padding: 0.5rem 0.7rem; border: 1px solid var(--line); border-radius: 8px; font-size: 0.9rem; font-family: inherit; }
+  .apikey-box button { padding: 0.5rem 0.9rem; border: 1px solid var(--line); border-radius: 8px; background: #fff; cursor: pointer; font-size: 0.85rem; font-family: inherit; }
+  .apikey-box button:hover { background: var(--moss); }
+  .apikey-box .status { margin-top: 0.4rem; font-size: 0.82rem; color: var(--text-soft); }
+  .apikey-box a { color: var(--leaf); }
+
+  .dropzone { border: 2px dashed var(--line); border-radius: 12px; padding: 2rem; text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s; color: var(--text-soft); }
+  .dropzone:hover, .dropzone.drag { border-color: var(--leaf-light); background: var(--moss); }
+  .dropzone input { display: none; }
+  .dropzone strong { color: var(--leaf); }
+
+  .canvas-wrap { position: relative; margin-top: 1.25rem; display: none; line-height: 0; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); }
+  .canvas-wrap.active { display: block; }
+  #imgCanvas { width: 100%; display: block; cursor: crosshair; touch-action: none; }
+  .canvas-help { font-size: 0.85rem; color: var(--text-soft); margin-top: 0.6rem; }
+
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+  @media (max-width: 600px) { .row { grid-template-columns: 1fr; } }
+  label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.35rem; color: var(--bark); }
+  input[type="number"], input[type="text"], select { width: 100%; padding: 0.6rem 0.7rem; border: 1px solid var(--line); border-radius: 8px; font-family: var(--font-body); font-size: 0.95rem; background: var(--bg); color: var(--text); }
+  input:focus, select:focus { outline: 2px solid var(--leaf-light); outline-offset: 1px; }
+
+  .species-box { display: flex; align-items: center; gap: 1rem; background: var(--moss); border: 1px solid var(--line); border-radius: 10px; padding: 1rem 1.25rem; margin-top: 1rem; }
+  .species-box .icon { font-size: 2.2rem; line-height: 1; }
+  .species-box .meta strong { font-family: var(--font-display); font-size: 1.15rem; color: var(--bark); }
+  .species-box .meta .conf { font-size: 0.85rem; color: var(--text-soft); }
+
+  .btn { display: inline-flex; align-items: center; gap: 0.5rem; background: var(--leaf); color: #fff; border: none; border-radius: 999px; padding: 0.7rem 1.4rem; font-size: 0.95rem; font-weight: 600; font-family: var(--font-body); cursor: pointer; transition: background 0.2s, transform 0.1s; }
+  .btn:hover { background: #3d5a2f; }
+  .btn:active { transform: scale(0.98); }
+  .btn:disabled { background: var(--line); cursor: not-allowed; }
+  .btn.secondary { background: transparent; color: var(--leaf); border: 1px solid var(--leaf-light); }
+  .btn.secondary:hover { background: var(--moss); }
+
+  .wp-result { display: grid; grid-template-columns: auto 1fr; gap: 1.5rem; align-items: center; margin-top: 1rem; padding-top: 1.25rem; border-top: 1px solid var(--line); }
+  @media (max-width: 600px) { .wp-result { grid-template-columns: 1fr; text-align: center; } }
+  .wp-circle { width: 110px; height: 110px; border-radius: 50%; border: 6px solid var(--leaf); display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: var(--font-display); color: var(--bark); background: var(--moss); margin-inline: auto; }
+  .wp-circle .num { font-size: 2.1rem; font-weight: 700; line-height: 1; }
+  .wp-circle .unit { font-size: 0.7rem; letter-spacing: 0.08em; color: var(--text-soft); text-transform: uppercase; }
+  .wp-label { display: inline-block; font-family: var(--font-mono); font-size: 0.8rem; padding: 0.2rem 0.6rem; border-radius: 999px; margin-bottom: 0.4rem; }
+  .wp-label.hoch { background: #e7f3df; color: #3d5a2f; }
+  .wp-label.mittel { background: #fbeed6; color: #9a6418; }
+  .wp-label.gering { background: #f6e6e4; color: #a14b3f; }
+  .wp-desc { color: var(--text-soft); font-size: 0.92rem; margin: 0; }
+
+  .legend { display: grid; gap: 0.6rem; font-size: 0.9rem; margin-top: 1rem; }
+  .legend .row2 { display: flex; justify-content: space-between; padding: 0.4rem 0.7rem; border-radius: 8px; background: var(--bg); border: 1px solid var(--line); }
+  .legend .row2 span:last-child { font-family: var(--font-mono); color: var(--leaf); font-weight: 600; }
+
+  .slider { width: 100%; -webkit-appearance: none; appearance: none; height: 6px; border-radius: 999px; background: linear-gradient(90deg, var(--leaf-light), var(--gold)); outline: none; margin: 0.5rem 0; }
+  .slider::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%; background: var(--bark); border: 3px solid var(--paper); box-shadow: 0 0 0 1px var(--line); cursor: pointer; }
+  .slider::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: var(--bark); border: 3px solid var(--paper); cursor: pointer; }
+  .slider-scale { display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-soft); margin-bottom: 1rem; }
+  .formula-box { font-family: var(--font-mono); font-size: 0.85rem; background: var(--bg); border: 1px dashed var(--line); border-radius: 8px; padding: 0.6rem 0.9rem; color: var(--text-soft); margin-bottom: 1rem; text-align: center; }
+  .wp-circle.facade { border-color: var(--gold); background: #fbeed6; }
+  .wp-circle.facade .num { font-size: 1.7rem; }
+
+  /* === Tierarten & Nistkasten === */
+  .fauna-divider { margin: 1.5rem 0 1rem; border: none; border-top: 1px solid var(--line); }
+  .fauna-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.9rem; flex-wrap: wrap; }
+  .fauna-header h3 { font-family: var(--font-display); font-size: 1.1rem; color: var(--bark); margin: 0; }
+  .fauna-badge { font-family: var(--font-mono); font-size: 0.75rem; background: var(--moss); border: 1px solid var(--leaf-light); color: var(--leaf); border-radius: 999px; padding: 0.15rem 0.7rem; }
+  .fauna-empty { background: var(--moss); border: 1px solid var(--line); border-radius: 10px; padding: 1rem 1.25rem; font-size: 0.9rem; color: var(--text-soft); text-align: center; }
+  .fauna-loading { text-align: center; padding: 1.5rem; color: var(--text-soft); font-size: 0.9rem; }
+  .fauna-loading .spinner { display: inline-block; width: 20px; height: 20px; border: 3px solid var(--line); border-top-color: var(--leaf); border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle; margin-right: 0.5rem; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .animal-cards { display: grid; gap: 0.75rem; }
+  .animal-card { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .animal-card-head { display: flex; align-items: center; gap: 0.85rem; padding: 0.85rem 1rem; background: var(--moss); cursor: pointer; user-select: none; transition: background 0.15s; }
+  .animal-card-head:hover { background: #d8e8cb; }
+  .ac-icon { font-size: 1.55rem; flex-shrink: 0; line-height: 1; }
+  .ac-info { flex: 1; min-width: 0; }
+  .ac-info strong { display: block; font-size: 0.98rem; color: var(--bark); }
+  .ac-info .ac-sub { font-size: 0.78rem; font-family: var(--font-mono); color: var(--text-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ac-chevron { color: var(--text-soft); font-size: 0.8rem; transition: transform 0.2s; flex-shrink: 0; }
+  .animal-card.open .ac-chevron { transform: rotate(180deg); }
+
+  .nk-body { display: none; padding: 1rem 1.1rem 1.1rem; border-top: 1px solid var(--line); background: var(--paper); }
+  .animal-card.open .nk-body { display: block; }
+  .nk-body h4 { font-family: var(--font-display); font-size: 0.93rem; color: var(--bark); margin: 0 0 0.5rem; }
+  .nk-body p { font-size: 0.88rem; color: var(--text-soft); margin: 0 0 0.75rem; }
+  .nk-specs { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 0.45rem; }
+  .nk-spec { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 0.45rem 0.65rem; }
+  .nk-lbl { display: block; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-soft); margin-bottom: 0.1rem; }
+  .nk-val { font-family: var(--font-mono); font-size: 0.88rem; color: var(--bark); font-weight: 600; }
+
+  footer { text-align: center; color: var(--text-soft); font-size: 0.85rem; padding: 1.5rem; }
+</style>
+</head>
+<body>
+
+<header class="site">
+  <svg class="ring-mark" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <circle cx="32" cy="32" r="28" stroke="#4a6b3a" stroke-width="1.5"/>
+    <circle cx="32" cy="32" r="20" stroke="#7fa86a" stroke-width="1.5"/>
+    <circle cx="32" cy="32" r="12" stroke="#c98a3c" stroke-width="1.5"/>
+    <circle cx="32" cy="32" r="3" fill="#3e2f23"/>
+  </svg>
+  <h1>Baumwert-Erfassung</h1>
+  <p class="tagline">Foto hochladen, Baumart bestimmen, Kronenvolumen schätzen und die ökologische Wertigkeit berechnen.</p>
+</header>
+
+<main>
+
+  <!-- 1: Standort -->
+  <section class="card">
+    <h2><span class="step">1</span> Standort</h2>
+    <p class="hint">Gib die Stadt und die Umgebung an, in der der Baum steht.</p>
+    <div class="row">
+      <div>
+        <label for="cityInput">Stadt</label>
+        <input type="text" id="cityInput" placeholder="z. B. Regensburg">
+      </div>
+      <div>
+        <label for="locationType">Umgebung</label>
+        <select id="locationType">
+          <option value="urban">Urban / Stadt</option>
+          <option value="forest">Wald</option>
+          <option value="field">Feld / Offenland</option>
+          <option value="water">Gewässer</option>
+        </select>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2: Upload -->
+  <section class="card">
+    <h2><span class="step">2</span> Foto hochladen</h2>
+    <p class="hint">Lade ein Foto des Baumes hoch. Für die Kronenvolumen-Schätzung ist ein Referenzobjekt (z. B. eine Person) im Bild hilfreich.</p>
+    <label for="fileInput" class="dropzone" id="dropzone">
+      <input type="file" id="fileInput" accept="image/*">
+      <span><strong>Bild auswählen</strong> oder hierher ziehen<br>JPG, PNG – max. 10 MB</span>
+    </label>
+    <div class="canvas-wrap" id="canvasWrap"><canvas id="imgCanvas"></canvas></div>
+    <p class="canvas-help" id="canvasHelp"></p>
+  </section>
+
+  <!-- 3: Baumart -->
+  <section class="card">
+    <h2><span class="step">3</span> Baumart erkennen</h2>
+    <p class="hint">Die Erkennung erfolgt über Google Gemini. Eine Nahaufnahme von Blättern oder Rinde liefert bessere Ergebnisse.</p>
+    <div class="apikey-box">
+      <label for="geminiKeyInput">Gemini API-Key (nur lokal gespeichert, nie hochgeladen)</label>
+      <div class="row">
+        <input type="password" id="geminiKeyInput" placeholder="API-Key einfügen…" autocomplete="off">
+        <button type="button" id="toggleKeyVisibility">👁</button>
+        <button type="button" id="saveKeyBtn">Speichern</button>
+      </div>
+      <div class="status" id="keyStatus">Kein Key gespeichert. Erstelle einen kostenlosen Key unter <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>.</div>
+    </div>
+    <button class="btn" id="identifyBtn" disabled>🌳 Baumart erkennen</button>
+    <div class="species-box" id="speciesBox" style="display:none;">
+      <div class="icon">🌳</div>
+      <div class="meta"><strong id="speciesName">–</strong><br><span class="conf" id="speciesConf"></span></div>
+    </div>
+  </section>
+
+  <!-- 4: Krone -->
+  <section class="card">
+    <h2><span class="step">4</span> Kronenvolumen schätzen</h2>
+    <p class="hint">Gib den Stammdurchmesser (BHD, 1,3 m Höhe) ein. Die KI schätzt das dreidimensionale Kronenvolumen anhand des Fotos.</p>
+    <div class="row" style="grid-template-columns:1fr 1fr 1fr;">
+      <div>
+        <label for="trunkDiameter">Stammdurchmesser / BHD (cm)</label>
+        <input type="number" id="trunkDiameter" step="1" placeholder="z. B. 45" value="45">
+      </div>
+      <div>
+        <label for="crownDiameterDisplay">Kronendurchmesser (m)</label>
+        <input type="number" id="crownDiameterDisplay" step="0.1" placeholder="wird von der KI geschätzt" readonly>
+      </div>
+      <div>
+        <label for="crownVolume">Kronenfläche (m²)</label>
+        <input type="number" id="crownVolume" step="1" placeholder="wird von der KI geschätzt" readonly>
+      </div>
+    </div>
+    <button class="btn secondary" id="estimateCrownBtn" disabled>🌳 Kronenvolumen von KI schätzen lassen</button>
+    <p class="canvas-help" id="crownHelp"></p>
+  </section>
+
+  <!-- 5: Wertigkeit + Tierarten -->
+  <section class="card">
+    <h2><span class="step">5</span> Ökologische Wertigkeit &amp; Tierarten</h2>
+    <p class="hint">Wähle Gesundheitszustand und Habitatfunktion. Anschließend werden typische Tierarten und passende Nistkästen ermittelt – basierend auf Baumart, Standort und Baumgröße.</p>
+
+    <div class="row">
+      <div>
+        <label for="healthSelect">Gesundheitszustand</label>
+        <select id="healthSelect">
+          <option value="3">Sehr gut – kräftig, vital, ohne Schäden</option>
+          <option value="2">Gut – kleine Schäden, insgesamt vital</option>
+          <option value="1">Mäßig – sichtbare Schäden, eingeschränkt vital</option>
+          <option value="0">Schlecht – stark geschädigt, absterbend</option>
+        </select>
+      </div>
+      <div>
+        <label for="habitatSelect">Lebensraum für Tiere/Pflanzen</label>
+        <select id="habitatSelect">
+          <option value="3">Sehr hoch – Höhlen, Horste, many Arten</option>
+          <option value="2">Hoch – mehrere Arten/Strukturen erkennbar</option>
+          <option value="1">Mittel – vereinzelt Nutzung erkennbar</option>
+          <option value="0">Gering – keine erkennbare Habitatfunktion</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="wp-result">
+      <div class="wp-circle">
+        <span class="num" id="wpValue">–</span>
+        <span class="unit">WP</span>
+      </div>
+      <div>
+        <span class="wp-label" id="wpLabel">–</span>
+        <p class="wp-desc" id="wpDesc">Wähle Gesundheit und Lebensraum aus, um die Wertigkeit zu berechnen.</p>
+      </div>
+    </div>
+
+    <div class="legend">
+      <div class="row2"><span>Hohe Bedeutung</span><span>11–15 WP</span></div>
+      <div class="row2"><span>Mittlere Bedeutung</span><span>8 WP</span></div>
+      <div class="row2"><span>Geringe Bedeutung</span><span>3 WP</span></div>
+    </div>
+
+    <!-- Tierarten -->
+    <hr class="fauna-divider">
+    <div class="fauna-header">
+      <h3>🦅 Typische Tierarten &amp; Nistkästen</h3>
+      <span class="fauna-badge" id="faunaBadge">warte auf Baumarterkennung …</span>
+    </div>
+    <div id="faunaOutput">
+      <div class="fauna-empty">Erkenne zuerst die Baumart (Schritt 3), damit hier passende Tierarten angezeigt werden können.</div>
+    </div>
+  </section>
+
+  <!-- 6: Bebauungsgrad -->
+  <section class="card">
+    <h2><span class="step">6</span> Bebauungsgrad &amp; Ersatzfläche</h2>
+    <p class="hint">Gib an, wie stark der Standort bebaut wird. Daraus ergibt sich die nötige Fassadenfläche als ökologischer Ersatz.</p>
+    <label for="densitySlider">Bebauungsgrad: <span id="densityValue">0,65</span></label>
+    <input type="range" id="densitySlider" min="0.3" max="1.0" step="0.01" value="0.65" class="slider">
+    <div class="slider-scale"><span>0,3 – wenig bebaut</span><span>1,0 – stark bebaut</span></div>
+    <div class="formula-box"><span id="formulaText">(WP × Kronenvolumen × Bebauungsgrad) − 20 %</span></div>
+    <div class="wp-result">
+      <div class="wp-circle facade">
+        <span class="num" id="facadeValue">–</span>
+        <span class="unit">m² Fassade</span>
+      </div>
+      <div>
+        <span class="wp-label hoch">Ersatzfläche</span>
+        <p class="wp-desc" id="facadeDesc">Lade ein Bild hoch, ermittle das Kronenvolumen und wähle Gesundheit/Lebensraum, um die Ersatzfläche zu berechnen.</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>Baumwert-Erfassung · lokale Auswertung im Browser, keine Daten werden hochgeladen.</footer>
+
+<script>
+(function () {
+
+// =========================================================
+// NISTKASTEN-DATENBANK
+// =========================================================
+const NK = {
+  "Meisen": { icon:"🐦", typ:"Meisenkasten (Typ B)", tiertyp:"Vogel", beschreibung:"Kompakter Höhlenkasten für Kohl-, Blau-, Sumpf- und Weidenmeise.", specs:{"Innenmaß B×T×H":"11 × 12 × 30 cm","Einflugöffnung Ø":"28 mm (Blaumeise) / 32 mm (Kohlmeise)","Montagehöhe":"2–4 m","Ausrichtung":"N bis O, kein Süden"} },
+  "Buntspecht": { icon:"🦜", typ:"Spechthöhle mit Holzspäne-Füllung", tiertyp:"Vogel", beschreibung:"Spechte zimmern Höhlen selbst; Kunsthöhlen mit Sägespäne-Füllung akzeptiert.", specs:{"Innenmaß B×T×H":"16 × 16 × 42 cm","Einflugöffnung Ø":"50 mm","Montagehöhe":"3–6 m","Ausrichtung":"variabel"} },
+  "Mittelspecht": { icon:"🦜", typ:"Spechthöhle / Naturhöhle", tiertyp:"Vogel", beschreibung:"Bevorzugt alte Eichen mit Rindentaschen; Kunsthöhlen mit Späne-Füllung.", specs:{"Innenmaß B×T×H":"14 × 14 × 38 cm","Einflugöffnung Ø":"45 mm","Montagehöhe":"4–8 m","Ausrichtung":"variabel"} },
+  "Gruenspecht": { icon:"🦜", typ:"Großhöhlenkasten", tiertyp:"Vogel", beschreibung:"Großer Stammhöhlenkasten nahe Ameisenkolonien.", specs:{"Innenmaß B×T×H":"18 × 18 × 48 cm","Einflugöffnung Ø":"55 mm","Montagehöhe":"3–5 m","Ausrichtung":"variabel"} },
+  "Waldkauz": { icon:"🦉", typ:"Waldkauz-Röhrenkasten", tiertyp:"Vogel", beschreibung:"Schrägkastenröhre oder aufrechter Baumhöhlenkasten, dunkel und geschützt.", specs:{"Innenmaß B×T×H":"20 × 20 × 60 cm","Einflugöffnung":"14 × 16 cm oval","Montagehöhe":"4–6 m","Ausrichtung":"Schatten, kein Süden"} },
+  "Singdrossel": { icon:"🐦", typ:"Halbhöhlenkasten", tiertyp:"Vogel", beschreibung:"Halboffener Nistkasten oder Nischenkasten an dichter Vegetation.", specs:{"Innenmaß B×T×H":"14 × 14 × 14 cm","Einflugöffnung":"offen (Halbhöhle)","Montagehöhe":"1,5–3 m","Ausrichtung":"N bis O"} },
+  "Star": { icon:"🐦", typ:"Starkasten (Typ A)", tiertyp:"Vogel", beschreibung:"Stabiler Höhlenkasten; Reinigungsmöglichkeit (Klappe) empfohlen.", specs:{"Innenmaß B×T×H":"16 × 16 × 36 cm","Einflugöffnung Ø":"45 mm","Montagehöhe":"3–6 m","Ausrichtung":"freie Anflugmöglichkeit"} },
+  "Erlenzeisig": { icon:"🐦", typ:"Kleiner Höhlenkasten", tiertyp:"Vogel", beschreibung:"Kleine Höhlenkästen, bevorzugt nahe Erlen und Birken.", specs:{"Innenmaß B×T×H":"11 × 11 × 28 cm","Einflugöffnung Ø":"28 mm","Montagehöhe":"2–4 m","Ausrichtung":"NO"} },
+  "Zeisig": { icon:"🐦", typ:"Kleiner Höhlenkasten", tiertyp:"Vogel", beschreibung:"Wie Erlenzeisig.", specs:{"Innenmaß B×T×H":"11 × 11 × 28 cm","Einflugöffnung Ø":"28 mm","Montagehöhe":"2–4 m","Ausrichtung":"NO"} },
+  "Dompfaff": { icon:"🐦", typ:"Halbhöhle / Nischenkasten", tiertyp:"Vogel", beschreibung:"Gimpel bauen freie Nester; Nischenkästen können angenommen werden.", specs:{"Innenmaß B×T×H":"15 × 15 × 15 cm","Einflugöffnung":"offen","Montagehöhe":"1,5–3 m","Ausrichtung":"dichte Vegetation"} },
+  "Wacholderdrossel": { icon:"🐦", typ:"Halbhöhle / Nistunterlage", tiertyp:"Vogel", beschreibung:"Koloniebrüter; Halbhöhle oder Nistunterlage in Bäumen.", specs:{"Innenmaß B×T×H":"16 × 16 × 16 cm","Einflugöffnung":"offen","Montagehöhe":"2–4 m","Ausrichtung":"variabel"} },
+  "Neuntoeter": { icon:"🐦", typ:"Dornenhecken empfohlen", tiertyp:"Vogel", beschreibung:"Neuntöter brüten in Dornenhecken; Schlehen, Weißdorn pflanzen.", specs:{"Empfehlung":"Dornenstrauch statt Kasten","Einflugöffnung":"–","Montagehöhe":"–","Ausrichtung":"–"} },
+  "Fledermaeuse": { icon:"🦇", typ:"Fledermaus-Flachkasten", tiertyp:"Fledermaus", beschreibung:"Schmaler Spaltkasten für Zwerg- und Breitflügelfledermaus.", specs:{"Innenmaß B×T×H":"22 × 5 × 36 cm","Einflug (unten)":"1,5–2 cm Spalt","Montagehöhe":"≥ 3 m","Ausrichtung":"S bis SW (Wärme)"} },
+  "Wasserfledermaus": { icon:"🦇", typ:"Rundkasten / Turmkasten", tiertyp:"Fledermaus", beschreibung:"Wasserfledermäuse nutzen Baumhöhlen; Rundkasten mit engem Einflugspalt.", specs:{"Innenmaß Ø × H":"14 cm × 40 cm","Einflug (unten)":"2 cm Spalt","Montagehöhe":"≥ 4 m","Ausrichtung":"S bis SW"} },
+  "Abendsegler": { icon:"🦇", typ:"Großer Fledermaus-Rundkasten", tiertyp:"Fledermaus", beschreibung:"Abendsegler brauchen breite Baumhöhlen; große Rundkästen.", specs:{"Innenmaß Ø × H":"20 cm × 50 cm","Einflug (unten)":"3 cm Spalt","Montagehöhe":"≥ 5 m","Ausrichtung":"S bis SW"} },
+  "Wildbienen": { icon:"🐝", typ:"Wildbienen-Nisthilfe (Bohrblock)", tiertyp:"Insekt", beschreibung:"Hartholzblock mit Bohrungen für solitäre Wildbienen.", specs:{"Bohrtiefe":"8–12 cm","Bohrung Ø":"2–10 mm (je Art)","Ausrichtung":"SO bis S (sonnig)","Schutz":"Dach gegen Regen"} },
+  "Honigbienen": { icon:"🐝", typ:"Bienenstock / Imkerkasten", tiertyp:"Insekt", beschreibung:"Honigbienen werden durch Imker gehalten; kein klassischer Nistkasten.", specs:{"Empfehlung":"Kontakt zu lokalem Imkerverein","Format":"Zander / DNM","Standort":"trockener, besonnter Platz","Aufstellung":"Imkerrecht beachten"} },
+  "Hummeln": { icon:"🐝", typ:"Hummel-Nistkasten", tiertyp:"Insekt", beschreibung:"Erdhummel-Kasten aus Holz, teils mit Blumentopf-Einlage.", specs:{"Innenmaß":"ca. 20 × 20 × 15 cm","Eingang Ø":"1,5–2 cm Röhre","Montage":"bodennahe Nische oder halbvergraben","Ausrichtung":"N bis NW (kühl)"} },
+  "Tagfalter": { icon:"🦋", typ:"Schmetterlings-Überwinterungskasten", tiertyp:"Insekt", beschreibung:"Schmaler Holzkasten mit vertikalen Einstiegsschlitzen.", specs:{"Innenmaß B×T×H":"20 × 6 × 35 cm","Schlitze":"1–1,5 cm breit, senkrecht","Füllung":"Rindenstücke / lose Zweige","Aufstellung":"licht- und windgeschützt"} },
+  "Falter": { icon:"🦋", typ:"Schmetterlings-Überwinterungskasten", tiertyp:"Insekt", beschreibung:"Wie Tagfalter.", specs:{"Innenmaß B×T×H":"20 × 6 × 35 cm","Schlitze":"1–1,5 cm breit","Füllung":"Rindenstücke / Zweige","Aufstellung":"licht- und windgeschützt"} },
+  "Totholzkaefer": { icon:"🪲", typ:"Totholzstapel / Käferstamm", tiertyp:"Insekt", beschreibung:"Hirschkäfer, Heldbock und Co. brauchen liegendes Totholz, kein klassischer Kasten.", specs:{"Empfehlung":"Totholzstapel 30–50 cm Ø","Tiefe":"mind. 50 cm im Boden","Holzart":"Eiche bevorzugt","Pflege":"niemals entfernen"} },
+  "Hirschkaefer": { icon:"🪲", typ:"Eichenstumpf stehen lassen", tiertyp:"Insekt", beschreibung:"Hirschkäfer legen Eier in verrottende Eichenwurzeln und -stümpfe.", specs:{"Empfehlung":"Eichenstumpf im Boden belassen","Holzart":"Stiel-/Traubeneiche","Schutz":"§ 7 BNatSchG","Pflege":"kein Entfernen"} },
+  "Heldbock": { icon:"🪲", typ:"Alte Eichen als Habitatbäume", tiertyp:"Insekt", beschreibung:"Heldbock (Cerambyx cerdo) ist auf alte Eichen angewiesen; kein Kasten-Ersatz möglich.", specs:{"Empfehlung":"Alte Eichen erhalten","Schutz":"FFH Anhang II & IV","Massnahme":"Habitatbaum-Schild anbringen","Pflege":"keine Faellung"} },
+  "Feuchtgebietsinsekten": { icon:"🪲", typ:"Flachgewässer / Totholz im Wasser", tiertyp:"Insekt", beschreibung:"Libellen, Schnakenarten brauchen Gewässernähe, kein klassischer Kasten.", specs:{"Empfehlung":"Flachgewässer / Teich anlegen","Totholz":"im und am Gewässer belassen","Ufer":"unkrautfrei lassen","Pflege":"keine Biozide"} },
+  "Ulmenzipfelfalter": { icon:"🦋", typ:"Schmetterlings-Überwinterungskasten", tiertyp:"Insekt", beschreibung:"Spezialist der Ulme; Larven an Ulmenblättern, Überwinterungskasten sinnvoll.", specs:{"Innenmaß B×T×H":"20 × 6 × 35 cm","Schlitze":"1–1,5 cm breit","Füllung":"Rinde / Zweige","Aufstellung":"ulmennah, halbschattig"} },
+  "Igel (Fallobst)": { icon:"🦔", typ:"Igelkuppel / Laub-Totholz-Haufen", tiertyp:"Säugetier", beschreibung:"Igel suchen unter fruchttragenden Bäumen nach Fallobst und dortigen Insekten. Sie benötigen Verstecke.", specs:{"Empfehlung":"Laub- und Reisighaufen belassen","Bodenfreiheit":"mind. 15 cm für Durchläufe","Schutz":"Winterschlaf beachten","Zusatz":"Katzensicheres Futterhaus"} },
+  "Siebenschläfer": { icon:"🐭", typ:"Siebenschläfer-Spezialkasten", tiertyp:"Säugetier", beschreibung:"Ähnlich wie ein Nistkasten, aber meist mit verkleinertem Einstieg an der Baumseite.", specs:{"Innenmaß B×T×H":"15 × 15 × 30 cm","Einflugöffnung Ø":"40 mm","Montagehöhe":"3–5 m","Ausrichtung":"Mitten im dichten Geäst"} },
+  "Eichhörnchen": { icon:"🐿️", typ:"Eichhörnchen-Kobel", tiertyp:"Säugetier", beschreibung:"Großer Kasten mit mehreren Ausgängen (Fluchtwege) als Nest-Ersatz.", specs:{"Innenmaß B×T×H":"25 × 25 × 40 cm","Ausgänge":"mind. 2 Öffnungen (~7cm)","Montagehöhe":"4–6 m","Ausrichtung":"Stammnahe Gabelung"} }
+};
+
+// =========================================================
+// HILFSFUNKTIONEN & DYNAMISCHE ÖKO-MATRIX
+// =========================================================
+function locLabel(val) {
+  return { urban:'Urban / Stadt', forest:'Wald', field:'Offenland', water:'Gewässer' }[val] || val;
+}
+
+function volumeToSize(m3) {
+  const v = parseFloat(m3);
+  if (isNaN(v)) return 'Mittel';
+  if (v < 150) return 'Klein';
+  if (v < 800) return 'Mittel';
+  return 'Gross';
+}
+
+function normalize(s) {
+  return (s||'').toLowerCase()
+    .replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue').replace(/ß/g,'ss')
+    .replace(/[^a-z0-9]/g,' ').trim();
+}
+
+// Generiert dynamisch lebensechte Kombinationen basierend auf Baumart, Standort und Größe
+function lookupDB(baumartRaw, locVal, groesse) {
+  let birds = [];
+  let insects = [];
+  let mammals = [];
+  const b = baumartRaw.toLowerCase();
+
+  // 1. Basis-Zuordnung nach Standort & Größe
+  if (locVal === 'urban') {
+    mammals.push('Zwergfledermaus', 'Eichhörnchen');
+    if (groesse === 'Gross') { birds.push('Mauersegler', 'Dohle', 'Ringeltaube'); mammals.push('Abendsegler'); }
+    else if (groesse === 'Mittel') { birds.push('Amsel', 'Meisen', 'Gartenrotschwanz'); }
+    else { birds.push('Haussperling', 'Zeisig'); }
+  } else if (locVal === 'forest') {
+    mammals.push('Fledermaeuse');
+    if (groesse === 'Gross') { birds.push('Schwarzspecht', 'Waldkauz'); mammals.push('Abendsegler', 'Siebenschläfer'); }
+    else if (groesse === 'Mittel') { birds.push('Buntspecht', 'Zeisig'); mammals.push('Eichhörnchen'); }
+    else { birds.push('Meisen'); }
+  } else if (locVal === 'water') {
+    mammals.push('Wasserfledermaus');
+    if (groesse === 'Gross') { birds.push('Wacholderdrossel', 'Singdrossel'); }
+    else if (groesse === 'Mittel') { birds.push('Star', 'Meisen'); }
+    else { birds.push('Erlenzeisig'); }
+  } else { // field / Offenland
+    if (groesse === 'Gross') { birds.push('Waldkauz', 'Star'); }
+    else if (groesse === 'Mittel') { birds.push('Star', 'Zeisig'); }
+    else { birds.push('Neuntoeter', 'Dompfaff'); }
+  }
+
+  // 2. Baumartspezifische biologische Spezialisierung
+  if (b.includes('eiche')) {
+    insects.push('Hirschkaefer', 'Heldbock', 'Totholzkaefer'); birds.push('Mittelspecht');
+  } else if (b.includes('buche') || b.includes('hainbuche')) {
+    insects.push('Totholzkaefer'); birds.push('Buntspecht');
+  } else if (b.includes('erle')) {
+    birds.push('Erlenzeisig'); insects.push('Feuchtgebietsinsekten');
+  } else if (b.includes('birke')) {
+    birds.push('Zeisig'); insects.push('Tagfalter');
+  } else if (b.includes('linde')) {
+    insects.push('Hummeln', 'Honigbienen'); birds.push('Gruenspecht');
+  } else if (b.includes('ulme')) {
+    insects.push('Ulmenzipfelfalter');
+  } else if (b.includes('kastanie') || b.includes('ahorn')) {
+    insects.push('Hummeln', 'Tagfalter');
+  } else if (b.includes('kirsche') || b.includes('mispel') || b.includes('apfel') || b.includes('birne') || b.includes('walnuss')) {
+    birds.push('Singdrossel', 'Star'); insects.push('Wildbienen'); mammals.push('Igel (Fallobst)');
+    if (b.includes('walnuss')) mammals.push('Eichhörnchen');
+  } else if (b.includes('eberesche') || b.includes('mehlbeere') || b.includes('dorn')) {
+    birds.push('Dompfaff', 'Wacholderdrossel'); insects.push('Wildbienen');
+    if (b.includes('dorn') || b.includes('weißdorn')) birds.push('Neuntoeter');
+  } else if (b.includes('paulownia') || b.includes('tulpenbaum')) {
+    insects.push('Honigbienen', 'Hummeln');
+  }
+
+  // Allgemeiner Fallback, falls die Listen leer sein sollten
+  if (!insects.length) insects.push('Wildbienen', 'Tagfalter');
+
+  // Zusammenführen, Duplikate entfernen & auf Top 5 limitieren
+  let combined = [...birds, ...insects, ...mammals];
+  return [...new Set(combined)].slice(0, 5);
+}
+
+function getNK(name) {
+  const nNorm = normalize(name);
+  if (NK[name]) return NK[name];
+  for (const key of Object.keys(NK)) {
+    const kNorm = normalize(key);
+    if (nNorm.includes(kNorm) || kNorm.includes(nNorm)) return NK[key];
+  }
+  if (nNorm.includes('fledermaus')) return NK['Fledermaeuse'];
+  if (nNorm.includes('biene') || nNorm.includes('hummel')) return NK['Wildbienen'];
+  if (nNorm.includes('kaefer') || nNorm.includes('bock')) return NK['Totholzkaefer'];
+  if (nNorm.includes('falter')) return NK['Tagfalter'];
+  return NK['Meisen'];
+}
+
+function guessTyp(name) {
+  const n = normalize(name);
+  if (n.includes('fledermaus') || n.includes('segler') || n.includes('abendsegler')) return 'Fledermaus';
+  if (n.includes('biene') || n.includes('hummel') || n.includes('falter') || n.includes('kaefer') || n.includes('insekt') || n.includes('heldbock')) return 'Insekt';
+  if (n.includes('igel') || n.includes('eichhoernchen') || n.includes('schlaefer')) return 'Säugetier';
+  return 'Vogel';
+}
+
+// =========================================================
+// RENDER
+// =========================================================
+function renderCard(name, typ, grund, idx) {
+  const nk = getNK(name);
+  const icon = nk.icon || (typ==='Fledermaus'?'🦇':typ==='Insekt'?'🐝':typ==='Säugetier'?'🦔':'🐦');
+  const specs = nk.specs ? Object.entries(nk.specs).map(([k,v]) =>
+    `<div class="nk-spec"><span class="nk-lbl">${k}</span><span class="nk-val">${v}</span></div>`
+  ).join('') : '';
+
+  return `<div class="animal-card" id="ac${idx}">
+    <div class="animal-card-head" onclick="document.getElementById('ac${idx}').classList.toggle('open')">
+      <div class="ac-icon">${icon}</div>
+      <div class="ac-info">
+        <strong>${name}</strong>
+        <span class="ac-sub">${typ}${grund?' · '+grund:''}</span>
+      </div>
+      <div class="ac-chevron">▾</div>
+    </div>
+    <div class="nk-body">
+      <h4>🏠 ${nk.typ || 'Lebensraum-Förderung'}</h4>
+      <p>${nk.beschreibung || 'Bietet Schutz und Nahrungsgrundlagen am gewählten Standort.'}</p>
+      <div class="nk-specs">${specs}</div>
+    </div>
+  </div>`;
+}
+
+async function updateFauna() {
+  const baumart = speciesName.textContent;
+  if (!baumart || baumart === '–' || baumart.includes('fehlgeschlagen')) {
+    faunaOut.innerHTML = '<div class="fauna-empty">Erkenne zuerst die Baumart (Schritt 3).</div>';
+    faunaBadge.textContent = 'warte auf Baumarterkennung …';
+    return;
+  }
+
+  const locVal = locationType.value;
+  const groesse = volumeToSize(crownVolume.value);
+  const baumLabel = baumart.split('(')[0].trim();
+
+  faunaBadge.textContent = `${baumLabel} · ${locLabel(locVal)} · ${groesse}`;
+ 
+  // Holt die dynamischen Daten basierend auf eurer neuen Logik
+  const animals = lookupDB(baumart, locVal, groesse);
+
+  if (!animals.length) {
+    faunaOut.innerHTML = '<div class="fauna-empty">Keine typischen Tierarten für diese Konstellation ermittelt.</div>';
+    return;
+  }
+
+  faunaOut.innerHTML = '<div class="animal-cards">' + animals.map((name, i) => {
+    const typ = guessTyp(name);
+    return renderCard(name, typ, 'Regionale Zuordnung (Regensburg)', i);
+  }).join('') + '</div>';
+}
+
+// =========================================================
+// DOM-REFERENZEN & EVENTS
+// =========================================================
+const fileInput    = document.getElementById('fileInput');
+const dropzone     = document.getElementById('dropzone');
+const canvasWrap   = document.getElementById('canvasWrap');
+const canvas       = document.getElementById('imgCanvas');
+const ctx          = canvas.getContext('2d');
+const canvasHelp   = document.getElementById('canvasHelp');
+const identifyBtn  = document.getElementById('identifyBtn');
+const speciesBox   = document.getElementById('speciesBox');
+const speciesName  = document.getElementById('speciesName');
+const speciesConf  = document.getElementById('speciesConf');
+const trunkDiam    = document.getElementById('trunkDiameter');
+const crownVolume  = document.getElementById('crownVolume');
+const crownDiamDisp= document.getElementById('crownDiameterDisplay');
+const estimateBtn  = document.getElementById('estimateCrownBtn');
+const crownHelp    = document.getElementById('crownHelp');
+const healthSel    = document.getElementById('healthSelect');
+const habitatSel   = document.getElementById('habitatSelect');
+const wpVal        = document.getElementById('wpValue');
+const wpLbl        = document.getElementById('wpLabel');
+const wpDsc        = document.getElementById('wpDesc');
+const faunaOut     = document.getElementById('faunaOutput');
+const faunaBadge   = document.getElementById('faunaBadge');
+const locationType = document.getElementById('locationType');
+const densitySlider= document.getElementById('densitySlider');
+const densityVal   = document.getElementById('densityValue');
+const facadeVal    = document.getElementById('facadeValue');
+const facadeDesc   = document.getElementById('facadeDesc');
+
+let imgObj = new Image();
+
+// File-Load Handling
+fileInput.addEventListener('change', e => { if (e.target.files[0]) loadImg(e.target.files[0]); });
+['dragover','dragleave','drop'].forEach(ev => {
+  dropzone.addEventListener(ev, e => {
+    e.preventDefault();
+    if (ev==='dragover') dropzone.classList.add('drag');
+    if (ev==='dragleave'||ev==='drop') dropzone.classList.remove('drag');
+    if (ev==='drop' && e.dataTransfer.files[0]) loadImg(e.dataTransfer.files[0]);
+  });
+});
+function loadImg(file) {
+  const r = new FileReader();
+  r.onload = ev => {
+    imgObj = new Image();
+    imgObj.onload = () => {
+      canvas.width = imgObj.naturalWidth; canvas.height = imgObj.naturalHeight;
+      ctx.drawImage(imgObj, 0, 0);
+      canvasWrap.classList.add('active');
+      identifyBtn.disabled = false; estimateBtn.disabled = false;
+      crownVolume.value=''; crownDiamDisp.value=''; canvasHelp.textContent=''; crownHelp.textContent='';
+      speciesBox.style.display='none';
+    };
+    imgObj.src = ev.target.result;
+  };
+  r.readAsDataURL(file);
+}
+
+// API-Key Speicherung
+const geminiInput  = document.getElementById('geminiKeyInput');
+const saveKeyBtn   = document.getElementById('saveKeyBtn');
+const toggleKeyBtn = document.getElementById('toggleKeyVisibility');
+const keyStatus    = document.getElementById('keyStatus');
+const GK = 'baumcheck_gemini_api_key';
+function refreshKey() {
+  const s = localStorage.getItem(GK);
+  if (s) { geminiInput.value=s; keyStatus.innerHTML='✅ Key gespeichert (nur in diesem Browser).'; }
+  else keyStatus.innerHTML='Kein Key gespeichert. Erstelle einen kostenlosen Key unter <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>.';
+}
+refreshKey();
+saveKeyBtn.addEventListener('click', () => { const v=geminiInput.value.trim(); if(v) localStorage.setItem(GK,v); else localStorage.removeItem(GK); refreshKey(); });
+toggleKeyBtn.addEventListener('click', () => { geminiInput.type=geminiInput.type==='password'?'text':'password'; });
+
+// Gemini-Schnittstelle zur Volumenberechnung
+const GM = 'gemini-2.5-flash';
+async function geminiIdentify(canvasEl) {
+  const key = localStorage.getItem(GK)||';';
+  if (!key) throw new Error('Kein Gemini API-Key gespeichert.');
+  const b64 = canvasEl.toDataURL('image/jpeg',0.95).split(',')[1];
+  const trCm = parseFloat(trunkDiam.value)||45;
+ 
+  // Prompt angepasst auf dreidimensionales Kronenvolumen (crown_volume_m3)
+  const prompt = `Du siehst ein Foto eines Baumes.
+
+Der Stammdurchmesser (BHD in 1,3m Höhe) beträgt ${trCm} cm.
+
+Bestimme:
+
+1. die Baumart (bis zu 3 Vorschläge)
+2. den geschätzten Kronendurchmesser in Metern
+
+Antworte ausschließlich als JSON:
+
+{
+  "species":[
+    {
+      "name":"Deutscher Name (Lat. Name)",
+      "confidence":90
+    }
+  ],
+  "crown_diameter_m":12.5
+}`;
+  const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GM}:generateContent`,{
+    method:'POST', headers:{'Content-Type':'application/json','x-goog-api-key':key},
+    body: JSON.stringify({contents:[{parts:[{text:prompt},{inline_data:{mime_type:'image/jpeg',data:b64}}]}]})
+  });
+  if (!resp.ok) { const e=await resp.json().catch(()=>({})); throw new Error(`Gemini ${resp.status}: ${e?.error?.message||''}`); }
+const data = await resp.json();
+
+let text = (data?.candidates?.[0]?.content?.parts?.[0]?.text || '')
+  .trim()
+  .replace(/^```json\s*/i, '')
+  .replace(/^```\s*/i, '')
+  .replace(/```\s*$/i, '');
+
+const p = JSON.parse(text);
+  if (!p?.species?.length) throw new Error('Keine Baumart erkannt.');
+const aiDiameter = (+p.crown_diameter_m || 0) * 0.70;
+
+return {
+  species: p.species.slice(0,3).map(s=>({
+    name:s.name,
+    confidence:Math.round(+s.confidence||0)
+  })),
+  crownDiameterM: aiDiameter
+};
+}
+
+identifyBtn.addEventListener('click', async () => {
+  identifyBtn.disabled=true; identifyBtn.textContent = '🔄 Erkenne Baumart …';
+  try {
+    const r = await geminiIdentify(canvas);
+    const top = r.species[0];
+    speciesName.textContent = top.name;
+    const alts = r.species.slice(1).map(s=>`${s.name} (${s.confidence}%)`).join(', ');
+    speciesConf.textContent = alts ? `Konfidenz: ${top.confidence}% · weitere: ${alts}` : `Konfidenz: ${top.confidence}%`;
+    speciesBox.style.display='flex';
+ if (r.crownDiameterM) {
+  const crownDiameter = r.crownDiameterM;
+  const radius = crownDiameter / 2;
+  const crownArea = Math.PI * radius * radius;
+
+  crownDiamDisp.value = crownDiameter.toFixed(1);
+  crownVolume.value = crownArea.toFixed(1);
+
+  crownHelp.textContent =
+    `Kronendurchmesser: ${crownDiameter.toFixed(1)} m · Kronenfläche: ${crownArea.toFixed(1)} m²`;
+
+  calcFacade();
+}
+    await updateFauna();
+  } catch(e) { speciesName.textContent='Erkennung fehlgeschlagen'; speciesConf.textContent=e.message; speciesBox.style.display='flex'; }
+  finally { identifyBtn.disabled=false; identifyBtn.textContent='🌳 Baumart erkennen'; }
+});
+
+estimateBtn.addEventListener('click', async () => {
+  estimateBtn.disabled=true; estimateBtn.textContent='🔄 Schätze Kronenvolumen …'; crownHelp.textContent='';
+  try {
+    const r = await geminiIdentify(canvas);
+if (r.crownDiameterM) {
+
+  const diameter = r.crownDiameterM;
+  const radius = diameter / 2;
+
+  const crownArea =
+    Math.PI * radius * radius;
+
+  crownDiamDisp.value = diameter.toFixed(1);
+  crownVolume.value =
+    crownArea.toFixed(1);
+
+  crownHelp.textContent =
+    `Kronendurchmesser: ${diameter.toFixed(1)} m · Kronenfläche: ${crownArea.toFixed(1)} m²`;
+
+  calcFacade();
+}
+    else crownHelp.textContent='KI konnte kein Kronenvolumen ermitteln.';
+  } catch(e) { crownHelp.textContent=`Fehler: ${e.message}`; }
+  finally { estimateBtn.disabled=false; estimateBtn.textContent='🌳 Kronenvolumen von KI schätzen lassen'; }
+});
+
+// Fassadenberechnung basierend auf dem Volumen
+function fmt(n) { return n.toFixed(2).replace('.',','); }
+function calcFacade() {
+  const density = parseFloat(densitySlider.value);
+  densityVal.textContent = fmt(density);
+  const wp = parseFloat(wpVal.textContent);
+  const vol = parseFloat(crownVolume.value);
+  if (isNaN(wp)||isNaN(vol)||vol<=0) { facadeVal.textContent='–'; facadeDesc.textContent='Lade ein Bild hoch, ermittle das Kronenvolumen und wähle Gesundheit/Lebensraum.'; return; }
+  const raw = wp*vol*density;
+  const res = raw - raw*0.2;
+  facadeVal.textContent = res.toFixed(1);
+  facadeDesc.textContent = `Bei Bebauungsgrad ${fmt(density)} entspricht dieser Baum (WP ${wp}, Volumen ${vol} m³) rechnerisch ${res.toFixed(1)} m² Fassadenfläche als ökologischem Ersatz.`;
+}
+densitySlider.addEventListener('input', calcFacade);
+crownVolume.addEventListener('input', () => { calcFacade(); updateFauna(); });
+
+// Wertpunkte (WP)
+function calcWP() {
+  const h = parseInt(healthSel.value,10), ha = parseInt(habitatSel.value,10), sum = h+ha;
+  let wp, lbl, cls, desc;
+  if (sum>=5) { wp=11+Math.round(((sum-5)/1)*4); lbl='Hohe Bedeutung'; cls='hoch'; desc='Sehr guter Zustand und/oder bedeutender Lebensraum. Erhaltung hat hohe Priorität.'; }
+  else if (sum>=2) { wp=8; lbl='Mittlere Bedeutung'; cls='mittel'; desc='Akzeptabler Zustand mit gewissem ökologischem Wert.'; }
+  else { wp=3; lbl='Geringe Bedeutung'; cls='gering'; desc='Geschädigter Baum, kaum erkennbarer Lebensraum.'; }
+  wpVal.textContent=wp; wpLbl.textContent=lbl; wpLbl.className='wp-label '+cls; wpDsc.textContent=desc;
+}
+healthSel.addEventListener('change',()=>{calcWP();calcFacade();});
+habitatSel.addEventListener('change',()=>{calcWP();calcFacade();});
+locationType.addEventListener('change', updateFauna);
+
+calcWP(); calcFacade();
+
+})();
+</script>
+</body>
+</html>
